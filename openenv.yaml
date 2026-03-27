@@ -1,0 +1,9 @@
+name: "PCB-Auditor-Knight-Divers"
+version: "1.0.0"
+description: "Graph-based PCB validation environment."
+author: "Naman Pahariya"
+tasks:
+  - id: "short_circuit"
+    difficulty: "Easy"
+  - id: "voltage_mismatch"
+    difficulty: "Hard"
