@@ -1,9 +1,97 @@
-name: "PCB-Auditor-Knight-Divers"
+name: pcb-auditor-knight-divers
 version: "1.0.0"
-description: "Graph-based PCB validation environment."
-author: "Naman Pahariya"
+description: >
+  A real-world PCB netlist safety audit environment where an AI agent
+  must identify dangerous hardware violations (voltage mismatches,
+  short circuits, overcurrent conditions) across three tasks of
+  increasing difficulty before a board goes to manufacturing.
+
+authors:
+  - name: Naman Pahariya
+    email: namanpaharia217@gmail.com
+  - name: Kapish Gupta
+    email: kapishguptaa6c@gmail.com
+
+domain: hardware_engineering
+tags:
+  - pcb
+  - hardware-safety
+  - netlist-validation
+  - electronics-engineering
+  - openenv
+
 tasks:
-  - id: "short_circuit"
-    difficulty: "Easy"
-  - id: "voltage_mismatch"
-    difficulty: "Hard"
+  - id: task_voltage_mismatch
+    difficulty: easy
+    description: "Find a single voltage mismatch (9V supply to 3.3V MCU)"
+    max_steps: 5
+    violations: 1
+
+  - id: task_multi_violation
+    difficulty: medium
+    description: "Find two violations: voltage mismatch and short circuit on a motor driver board"
+    max_steps: 6
+    violations: 2
+
+  - id: task_full_audit
+    difficulty: hard
+    description: "Full audit of a power management PCB — find all 3 violation types"
+    max_steps: 7
+    violations: 3
+
+observation_space:
+  type: object
+  fields:
+    task_id: string
+    task_description: string
+    netlist: "list[dict]"
+    components: "list[dict]"
+    available_checks: "list[str]"
+    last_check_result: "string | null"
+    checks_performed: "list[str]"
+    step_count: integer
+    max_steps: integer
+    done: boolean
+
+action_space:
+  type: object
+  fields:
+    check_type:
+      type: string
+      enum:
+        - check_voltage_mismatch
+        - check_short_circuit
+        - check_component_rating
+        - submit_verdict
+    target_nets: "list[str] | null"
+    verdict: "string | null"
+
+reward_space:
+  type: float
+  range: [-0.3, 1.0]
+  description: >
+    +0.2 per meaningful check performed
+    +0.15 per new violation correctly identified
+    +0.25-1.0 for accurate final verdict (scales with violations found)
+    -0.1 for redundant checks
+    -0.3 for verdict missing critical violations
+
+api:
+  reset: POST /reset
+  step: POST /step
+  state: GET /state
+  tasks: GET /tasks
+  health: GET /health
+
+server:
+  host: "0.0.0.0"
+  port: 7860
+  framework: fastapi + gradio
+
+inference:
+  script: inference.py
+  runtime_limit_minutes: 5
+  required_env_vars:
+    - API_BASE_URL
+    - MODEL_NAME
+    - HF_TOKEN
