@@ -2,7 +2,7 @@
 title: PCB Auditor Knight Divers
 emoji: ⚡
 colorFrom: blue
-colorTo: cyan
+colorTo: indigo
 sdk: docker
 pinned: false
 ---
