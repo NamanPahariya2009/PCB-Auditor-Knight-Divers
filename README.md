@@ -1,3 +1,12 @@
+---
+title: PCB Auditor Knight Divers
+emoji: ⚡
+colorFrom: blue
+colorTo: cyan
+sdk: docker
+pinned: false
+---
+
 # ⚡ PCB Auditor — Knight Divers
 
 **An OpenEnv-compliant real-world environment for training AI agents to audit PCB netlists for hardware safety violations.**
