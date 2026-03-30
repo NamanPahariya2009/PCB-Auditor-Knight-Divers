@@ -1,7 +1,10 @@
 """
-PCB Auditor — FastAPI Server
-Exposes OpenEnv-compliant HTTP endpoints: /reset, /step, /state
-Also serves the Gradio HUD at /
+PCB Auditor — FastAPI Server v2
+Knight Divers | Naman Pahariya & Kapish Gupta
+
+Upgrades:
+- generate_pcb_graph now highlights full violation PATHS (edges + nodes) in Safety Orange
+- Gradio result_out now renders full audit_log for transparency
 """
 
 from __future__ import annotations
@@ -11,12 +14,12 @@ from typing import Any, Dict, Optional
 import gradio as gr
 import networkx as nx
 import matplotlib
-matplotlib.use("Agg")  # Non-interactive backend — required for server environments
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-from environment import PCBAuditorEnv, Action, Observation, Reward, State
+from environment import PCBAuditorEnv, Action
 from tasks import TASKS
 
 # ── FASTAPI APP ───────────────────────────────────────────────
@@ -24,15 +27,12 @@ from tasks import TASKS
 app = FastAPI(
     title="PCB Auditor — Knight Divers",
     description="OpenEnv-compliant PCB netlist safety audit environment.",
-    version="1.0.0",
+    version="2.0.0",
 )
 
-# One environment instance per server (single-agent use)
 _env = PCBAuditorEnv()
-_last_obs: Optional[Observation] = None
+_last_obs = None
 
-
-# ── REQUEST MODELS ────────────────────────────────────────────
 
 class ResetRequest(BaseModel):
     task_id: Optional[str] = None
@@ -63,19 +63,10 @@ def step_endpoint(req: StepRequest):
     if _last_obs is None:
         raise HTTPException(status_code=400, detail="Call /reset first.")
     try:
-        action = Action(
-            check_type=req.check_type,
-            target_nets=req.target_nets,
-            verdict=req.verdict,
-        )
+        action = Action(check_type=req.check_type, target_nets=req.target_nets, verdict=req.verdict)
         obs, reward, done, info = _env.step(action)
         _last_obs = obs
-        return {
-            "observation": obs.model_dump(),
-            "reward": reward.model_dump(),
-            "done": done,
-            "info": info,
-        }
+        return {"observation": obs.model_dump(), "reward": reward.model_dump(), "done": done, "info": info}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -91,11 +82,8 @@ def state_endpoint():
 @app.get("/tasks", response_model=Dict[str, Any])
 def list_tasks():
     return {
-        tid: {
-            "description": t["description"],
-            "difficulty": t["difficulty"],
-            "violation_count": len(t["violations"]),
-        }
+        tid: {"description": t["description"], "difficulty": t["difficulty"],
+              "violation_count": len(t["violations"])}
         for tid, t in TASKS.items()
     }
 
@@ -105,26 +93,33 @@ def health():
     return {"status": "online", "environment": "PCB Auditor Knight Divers"}
 
 
-# ── GRADIO HUD ────────────────────────────────────────────────
+# ── GRAPH GENERATOR ───────────────────────────────────────────
 
-def generate_pcb_graph(task_id: str, violations_found: list):
-    """Generate NetworkX topology map with violations highlighted."""
+def generate_pcb_graph(task_id: str, violation_paths: list):
+    """
+    Build NetworkX topology map.
+    Highlights entire violation PATHS in Safety Orange (#FF6B00)
+    instead of just start/end nodes.
+    """
     if task_id not in TASKS:
         return None
 
     task = TASKS[task_id]
-    G = nx.DiGraph()
     components = {c["id"]: c for c in task["components"]}
-    violation_nodes = set()
 
-    for v in violations_found:
-        parts = v.split(":")
-        if len(parts) >= 2:
-            nodes = parts[1].split("->")
-            violation_nodes.update(n.split("(")[0] for n in nodes)
-
+    G = nx.DiGraph()
     for conn in task["netlist"]:
-        G.add_edge(conn["from"], conn["to"], net=conn.get("net", ""))
+        G.add_edge(conn["from"], conn["to"],
+                   protection=conn.get("protection", True))
+
+    # Build sets of violation nodes and edges from paths
+    violation_nodes = set()
+    violation_edges = set()
+    for path in violation_paths:
+        for node in path:
+            violation_nodes.add(node)
+        for i in range(len(path) - 1):
+            violation_edges.add((path[i], path[i + 1]))
 
     plt.figure(figsize=(11, 6), facecolor="#0b0d17")
     ax = plt.gca()
@@ -132,61 +127,81 @@ def generate_pcb_graph(task_id: str, violations_found: list):
 
     pos = nx.spring_layout(G, seed=42, k=2.5)
 
+    # Node colors
     node_colors = []
     for node in G.nodes():
         if node in violation_nodes:
-            node_colors.append("#ff4b2b")
+            node_colors.append("#FF6B00")   # Safety Orange — violation
         elif "GND" in node:
-            node_colors.append("#444466")
-        elif "VCC" in node or "POWER" in components.get(node, {}).get("type", "") or "VINPUT" in node or "V5V" in node or "VMOT" in node:
-            node_colors.append("#f0a500")
+            node_colors.append("#444466")   # Dark — ground
+        elif components.get(node, {}).get("type") == "POWER_SUPPLY" or \
+             any(p in node for p in ("VCC", "VMOT", "VINPUT", "V5V")):
+            node_colors.append("#f0a500")   # Gold — power source
         else:
-            node_colors.append("#00d4ff")
+            node_colors.append("#00d4ff")   # Cyan — normal
+
+    # Draw normal edges first
+    normal_edges = [(u, v) for u, v in G.edges() if (u, v) not in violation_edges]
+    violation_edge_list = [(u, v) for u, v in G.edges() if (u, v) in violation_edges]
 
     nx.draw_networkx_nodes(G, pos, node_color=node_colors, node_size=2200, ax=ax)
-    nx.draw_networkx_labels(G, pos, font_color="white", font_size=8, font_weight="bold", ax=ax)
-    nx.draw_networkx_edges(G, pos, edge_color="#555577", arrows=True,
-                           arrowsize=20, width=1.5, ax=ax)
+    nx.draw_networkx_labels(G, pos, font_color="white", font_size=8,
+                            font_weight="bold", ax=ax)
+    nx.draw_networkx_edges(G, pos, edgelist=normal_edges,
+                           edge_color="#555577", arrows=True, arrowsize=18,
+                           width=1.5, ax=ax)
+    # Violation edges — thick Safety Orange
+    if violation_edge_list:
+        nx.draw_networkx_edges(G, pos, edgelist=violation_edge_list,
+                               edge_color="#FF6B00", arrows=True, arrowsize=22,
+                               width=3.5, ax=ax, style="dashed")
 
-    ax.set_title(f"PCB TOPOLOGY — {task_id.upper().replace('_', ' ')}",
-                 color="white", fontsize=13, fontweight="bold", pad=12)
+    ax.set_title(
+        f"PCB TOPOLOGY — {task_id.upper().replace('_', ' ')}",
+        color="white", fontsize=13, fontweight="bold", pad=12
+    )
 
     legend_items = [
-        plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='#ff4b2b', markersize=10, label='⚠ Violation Node'),
+        plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='#FF6B00', markersize=10, label='⚠ Violation Path'),
         plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='#f0a500', markersize=10, label='⚡ Power Source'),
         plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='#00d4ff', markersize=10, label='✓ Normal Component'),
         plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='#444466', markersize=10, label='⏚ Ground'),
     ]
     ax.legend(handles=legend_items, loc="lower left", facecolor="#1a1c2e",
               labelcolor="white", fontsize=8, framealpha=0.8)
-
     plt.tight_layout()
     return plt.gcf()
 
 
+# ── GRADIO HUD ────────────────────────────────────────────────
+
 def run_audit(task_id: str, check_type: str, verdict: str):
-    """Gradio callback: runs a full mini-episode."""
+    """Run a full mini-episode and return audit log + graph."""
     env = PCBAuditorEnv()
-    obs = env.reset(task_id=task_id)
+    env.reset(task_id=task_id)
 
-    results = []
-    violations_found = []
-
-    # Step 1: Run the requested check
+    # Step 1: run the requested check
     action = Action(check_type=check_type)
     obs, reward, done, info = env.step(action)
-    results.append(f"**Step 1 — {check_type}**\n{obs.last_check_result}")
-    violations_found = list(env.state().violations_found)
 
-    # Step 2: Submit verdict
+    # Step 2: submit verdict
     if not done:
         action2 = Action(check_type="submit_verdict", verdict=verdict)
-        obs2, reward2, done2, info2 = env.step(action2)
-        results.append(f"\n**Final Verdict Score: {info2.get('final_score', 0.0):.2f}/1.00**")
-        results.append(f"\n{info2.get('grader_message', '')}")
-    
-    fig = generate_pcb_graph(task_id, violations_found)
-    return "\n\n".join(results), fig
+        obs, reward, done, info = env.step(action2)
+
+    # Build audit log display
+    log_lines = ["## 🔍 Audit Log\n"]
+    for entry in obs.audit_log:
+        log_lines.append(f"```\n{entry}\n```")
+
+    if "final_score" in info:
+        score = info["final_score"]
+        bar = "█" * int(score * 10) + "░" * (10 - int(score * 10))
+        log_lines.append(f"\n### Final Score: `{score:.2f}/1.00`  [{bar}]")
+        log_lines.append(f"\n**{info.get('grader_message', '')}**")
+
+    fig = generate_pcb_graph(task_id, obs.violation_paths)
+    return "\n\n".join(log_lines), fig
 
 
 with gr.Blocks() as hud:
@@ -211,7 +226,7 @@ with gr.Blocks() as hud:
             )
             verdict_box = gr.Textbox(
                 label="Your Verdict (describe violations found)",
-                placeholder="e.g. 9V source connected to 3.3V MCU, causing voltage mismatch",
+                placeholder="e.g. 9V source connected to 3.3V MCU, voltage mismatch detected",
                 lines=3,
             )
             scan_btn = gr.Button("🚀 RUN AUDIT", variant="primary")
@@ -220,8 +235,7 @@ with gr.Blocks() as hud:
             gr.Markdown("### 🖥️ Topology Diagnostic Map")
             graph_out = gr.Plot(label="PCB Netlist Topology")
 
-    with gr.Row():
-        result_out = gr.Markdown("### 📡 Waiting for audit...")
+    result_out = gr.Markdown("### 📡 Waiting for audit...")
 
     scan_btn.click(
         fn=run_audit,
@@ -236,13 +250,11 @@ with gr.Blocks() as hud:
 - `POST /step` — Execute action
 - `GET /state` — Current environment state
 - `GET /tasks` — List all available tasks
+- `GET /health` — Health check
     """)
 
 
-# ── MOUNT GRADIO ON FASTAPI ───────────────────────────────────
-
 app = gr.mount_gradio_app(app, hud, path="/", root_path="")
-
 
 if __name__ == "__main__":
     import uvicorn
