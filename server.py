@@ -214,20 +214,21 @@ with gr.Blocks() as hud:
     with gr.Row():
         with gr.Column(scale=1):
             gr.Markdown("### 🛠️ Audit Control Panel")
-            task_dropdown = gr.Dropdown(
-                choices=list(TASKS.keys()),
-                value="task_voltage_mismatch",
-                label="Select Task",
-            )
+            with gr.Tabs():
+                with gr.Tab("Built-in Tasks"):
+                    task_dropdown = gr.Dropdown(
+                        choices=list(TASKS.keys()), value="task_voltage_mismatch", label="Select Task"
+                    )
+                with gr.Tab("Live Fire (Custom)"):
+                    gr.Markdown("*Judges: Paste a custom JSON netlist here to test the deterministic engine on the fly.*")
+                    custom_json = gr.Code(language="json", lines=5, label="Custom Netlist JSON")
+
             check_dropdown = gr.Dropdown(
-                choices=["check_voltage_mismatch", "check_short_circuit", "check_component_rating"],
-                value="check_voltage_mismatch",
-                label="Select Check Type",
+                choices=["check_voltage_mismatch", "check_short_circuit", "check_component_rating", "check_missing_decoupling"],
+                value="check_voltage_mismatch", label="Select Check Type"
             )
             verdict_box = gr.Textbox(
-                label="Your Verdict (describe violations found)",
-                placeholder="e.g. 9V source connected to 3.3V MCU, voltage mismatch detected",
-                lines=3,
+                label="Your Verdict (describe violations found)", placeholder="e.g. 9V source connected to 3.3V MCU", lines=3
             )
             scan_btn = gr.Button("🚀 RUN AUDIT", variant="primary")
 

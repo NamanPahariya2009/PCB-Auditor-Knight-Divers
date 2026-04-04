@@ -72,6 +72,7 @@ class PCBAuditorEnv:
         "check_voltage_mismatch",
         "check_short_circuit",
         "check_component_rating",
+        "check_missing_decoupling",
         "submit_verdict",
     ]
 
@@ -259,6 +260,25 @@ class PCBAuditorEnv:
                     )
             if not result_lines:
                 result_lines.append("✓ All components within rated current limits.")
+
+        elif check_type == "check_missing_decoupling":
+            mcus = [n for n in G.nodes() if components.get(n, {}).get("type") in ["MICROCONTROLLER", "LOGIC_IC"]]
+            for mcu in mcus:
+                # Scan graph for any capacitor connected directly to the MCU
+                has_cap = False
+                for neighbor in G.neighbors(mcu):
+                    if components.get(neighbor, {}).get("type") == "CAPACITOR":
+                        has_cap = True
+                
+                if not has_cap:
+                    violation = f"MISSING_DECOUPLING:{mcu}"
+                    if violation not in found_violations:
+                        found_violations.append(violation)
+                        found_paths.append([mcu])
+                        result_lines.append(f"⚠ VIOLATION: {mcu} lacks a decoupling capacitor. High risk of power transients and resets.")
+            
+            if not result_lines:
+                result_lines.append("✓ All logic chips have proper decoupling capacitors.")
 
         return "\n".join(result_lines), found_violations, found_paths
 

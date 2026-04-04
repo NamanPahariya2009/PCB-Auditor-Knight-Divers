@@ -97,26 +97,18 @@ def run_agent_on_task(task_id: str) -> dict:
                 messages=[{"role": "system", "content": SYSTEM_PROMPT}] + history,
                 temperature=0.1,
                 max_tokens=256,
+                response_format={"type": "json_object"} # 👈 FORCES PURE JSON
             )
             raw = response.choices[0].message.content.strip()
             history.append({"role": "assistant", "content": raw})
+            
+            # Use Pydantic to strictly validate the LLM output
+            action_data = json.loads(raw)
+            action = Action(**action_data)
+
         except Exception as e:
-            print(f"  [ERROR] LLM call failed: {e}")
-            raw = '{"check_type": "submit_verdict", "verdict": "Unable to complete audit due to API error."}'
-
-        # Parse JSON action
-        try:
-            # Strip markdown fences if model added them
-            clean = raw.strip().lstrip("```json").rstrip("```").strip()
-            action_data = json.loads(clean)
-        except json.JSONDecodeError:
-            print(f"  [WARN] Could not parse JSON: {raw[:80]}")
-            action_data = {"check_type": "submit_verdict", "verdict": raw}
-
-        action = Action(
-            check_type=action_data.get("check_type", "submit_verdict"),
-            verdict=action_data.get("verdict", ""),
-        )
+            print(f"  [ERROR] LLM/Validation failed: {e}")
+            action = Action(check_type="submit_verdict", verdict="Audit failed due to component syntax error.")
 
         print(f"\n  Step {step_num+1}: ACTION = {action.check_type}")
         if action.verdict:
