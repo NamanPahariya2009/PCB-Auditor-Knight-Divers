@@ -5,6 +5,7 @@ colorFrom: blue
 colorTo: indigo
 sdk: docker
 pinned: false
+tags: [openenv]
 ---
 
 # ⚡ PCB AUDITOR: Protocol "Knight Divers"
@@ -41,10 +42,7 @@ Hardware engineers lose thousands of dollars and weeks of lead time because of s
 
 ## 🚀 The Ignition Sequence (Foolproof Setup)
 
-*We built this to be foolproof. Follow the sequence exactly.*
-
 ### Step 1: Secure the Blueprints
-Open your terminal and pull the repository to your local drive:
 ```bash
 git clone [https://github.com/NamanPahariya2009/PCB-Auditor-Knight-Divers.git](https://github.com/NamanPahariya2009/PCB-Auditor-Knight-Divers.git)
 cd PCB-Auditor-Knight-Divers
