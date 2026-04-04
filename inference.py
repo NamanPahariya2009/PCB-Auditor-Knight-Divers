@@ -1,91 +1,64 @@
 import os
 import json
-import time
-import textwrap
-from typing import List, Optional
 from openai import OpenAI
-from dotenv import load_dotenv
+from environment import PCBEnv
+from tasks import get_task_by_id
 
-# Load local .env for credentials
-load_dotenv()
+# 🛡️ BOX 2 & 3: Environment Variable Configuration
+# Defaults are strictly allowed only for BASE_URL and MODEL_NAME
+API_BASE_URL = os.getenv("API_BASE_URL", "https://api-inference.huggingface.co/v1/")
+MODEL_NAME = os.getenv("MODEL_NAME", "google/gemini-2.0-flash-exp")
 
-# Project specific imports
-from environment import PCBAuditorEnv, Action
-from tasks import TASKS
+# NO default allowed for HF_TOKEN to ensure judge's secrets are used
+HF_TOKEN = os.getenv("HF_TOKEN")
 
-# MANDATORY ENV VARS PER META SPEC
-API_BASE_URL = os.getenv("API_BASE_URL") or "https://openrouter.ai/api/v1"
-MODEL_NAME = os.getenv("MODEL_NAME") or "google/gemini-3-flash-preview"
-API_KEY = os.getenv("HF_TOKEN") or os.getenv("OPENROUTER_API_KEY")
-BENCHMARK = "pcb-auditor-knight-divers"
+# 🛡️ BOX 4: OpenAI Client Initialization
+client = OpenAI(
+    base_url=API_BASE_URL,
+    api_key=HF_TOKEN,
+)
 
-# Initialize Client
-client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY or "dummy-key")
+def run_inference():
+    # 🛡️ BOX 5: Mandatory Header
+    print("[START]")
 
-SYSTEM_PROMPT = textwrap.dedent("""
-    You are an expert PCB hardware safety engineer. Identify violations.
-    Respond ONLY as a JSON object:
-    {
-      "check_type": "check_voltage_mismatch | check_short_circuit | check_component_rating | check_missing_decoupling | submit_verdict",
-      "verdict": "Detailed string describing violations found (only if check_type is submit_verdict)"
-    }
-""").strip()
-
-def run_task(task_id: str):
-    env = PCBAuditorEnv()
-    obs = env.reset(task_id=task_id)
+    # List of tasks to be audited by the Knight Divers protocol
+    task_ids = ["task_voltage_mismatch", "task_multi_violation", "task_full_audit", "task_industrial_mcu"]
     
-    # 1. [START] line
-    print(f"[START] task={task_id} env={BENCHMARK} model={MODEL_NAME}", flush=True)
+    for task_id in task_ids:
+        task = get_task_by_id(task_id)
+        env = PCBEnv(task)
+        obs = env.reset()
+        done = False
+        step_count = 0
 
-    rewards = []
-    steps_taken = 0
-    score = 0.0
-    success = False
-    error = "null"
+        while not done and step_count < task.max_steps:
+            # 🛡️ BOX 5: Mandatory Step Counter
+            print(f"[STEP] {step_count}")
 
-    for step in range(1, obs.max_steps + 1):
-        prompt = f"TASK: {obs.task_description}\nCOMPONENTS: {obs.components}\nNETLIST: {obs.netlist}\nPREVIOUS: {obs.audit_log}"
-        
-        try:
-            completion = client.chat.completions.create(
-                model=MODEL_NAME,
-                messages=[
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": prompt},
-                ],
-                response_format={"type": "json_object"}
-            )
-            raw_action = completion.choices[0].message.content
-            action_dict = json.loads(raw_action)
-            action = Action(**action_dict)
-        except Exception as e:
-            action = Action(check_type="submit_verdict", verdict="Format Error")
-            error = str(e).replace("\n", " ")
+            # Construct the prompt for the AI Auditor
+            prompt = f"PCB Audit Mission: {task_id}\nObservation: {json.dumps(obs)}\nAction required (JSON format):"
+            
+            try:
+                # LLM Call via the authorized client
+                response = client.chat.completions.create(
+                    model=MODEL_NAME,
+                    messages=[{"role": "user", "content": prompt}],
+                    response_format={"type": "json_object"}
+                )
+                
+                # Extract and execute action
+                action_data = json.loads(response.choices[0].message.content)
+                obs, reward, done, info = env.step(action_data)
+                
+            except Exception as e:
+                # Fallback if the LLM fails during live audit
+                done = True
 
-        obs, reward_obj, done, info = env.step(action)
-        
-        step_reward = float(reward_obj.value)
-        rewards.append(step_reward)
-        steps_taken = step
-        
-        # 2. [STEP] line
-        done_val = str(done).lower()
-        print(f"[STEP] step={step} action={action.check_type} reward={step_reward:.2f} done={done_val} error={error}", flush=True)
+            step_count += 1
 
-        if done:
-            score = info.get("final_score", 0.0)
-            success = score >= 0.8
-            break
-
-    # 3. [END] line
-    rewards_str = ",".join(f"{r:.2f}" for r in rewards)
-    print(f"[END] success={str(success).lower()} steps={steps_taken} score={score:.2f} rewards={rewards_str}", flush=True)
-
-def main():
-    # Loop through all 4 of your tasks
-    for task_id in TASKS.keys():
-        run_task(task_id)
+    # 🛡️ BOX 5: Mandatory Footer
+    print("[END]")
 
 if __name__ == "__main__":
-    main()
+    run_inference()
