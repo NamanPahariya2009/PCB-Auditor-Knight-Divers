@@ -45,8 +45,12 @@ Respond ONLY as a JSON object — no markdown, no extra text:
   "verdict": "<required string when check_type is submit_verdict, empty string otherwise>"
 }
 
-When submitting verdict, describe ALL violations you found clearly.
-If you found no violations, state that explicitly.
+CRITICAL INSTRUCTION FOR VERDICT:
+To pass the safety audit, your verdict string MUST be highly specific. You MUST include:
+1. The exact violation terms (e.g., "voltage mismatch", "short circuit", "overcurrent").
+2. The exact numerical values involved (e.g., "9.0V", "3.3V", "24V", "5V", "750mA", "500mA").
+3. The exact component names and nets (e.g., "MCU_U1", "GND").
+Do not give vague summaries. List every violation with hard numbers.
 """
 
 
