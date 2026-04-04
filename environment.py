@@ -145,12 +145,45 @@ class PCBAuditorEnv:
 
         if check == "submit_verdict":
             done = True
-            grade_score, grade_msg, found = run_grader(
-                task_id=self._state.current_task_id,
-                checks_performed=self._state.checks_performed,
-                violations_found=self._state.violations_found,
-                verdict=action.verdict or "",
-            )
+            
+            # --- TRUE DYNAMIC GRADER (For Live Fire Custom JSONs) ---
+            if self._state.current_task_id == "custom_task":
+                expected = set(self._state.correct_violations)
+                found_set = set(self._state.violations_found)
+                correct_finds = found_set.intersection(expected)
+                
+                grade_score = 0.0
+                msgs = []
+                
+                # 1. Base points for doing the work (max 0.30)
+                if len(self._state.checks_performed) > 0:
+                    grade_score += 0.30
+                    msgs.append(f"✓ Performed {len(self._state.checks_performed)} diagnostic checks.")
+                
+                # 2. Dynamic math for finding the hidden violations (max 0.70)
+                if len(expected) > 0:
+                    accuracy = len(correct_finds) / len(expected)
+                    grade_score += (0.70 * accuracy)
+                    if accuracy == 1.0:
+                        msgs.append(f"✓ All {len(expected)} custom violations dynamically isolated.")
+                    else:
+                        msgs.append(f"✗ Missed hidden violations. Found {len(correct_finds)}/{len(expected)}.")
+                else:
+                    grade_score = 1.0
+                    msgs.append("✓ Custom circuit is safe. No violations expected.")
+                
+                grade_msg = " | ".join(msgs)
+                found = list(found_set)
+                
+            # --- STANDARD GRADER (For Built-In Tasks) ---
+            else:
+                grade_score, grade_msg, found = run_grader(
+                    task_id=self._state.current_task_id,
+                    checks_performed=self._state.checks_performed,
+                    violations_found=self._state.violations_found,
+                    verdict=action.verdict or "",
+                )
+
             self._state.score = grade_score
             self._state.audit_log.append(f"[VERDICT] {action.verdict}")
             self._state.audit_log.append(f"[SCORE] {grade_score:.2f} — {grade_msg}")
