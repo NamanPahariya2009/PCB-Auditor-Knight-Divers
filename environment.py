@@ -82,12 +82,16 @@ class PCBAuditorEnv:
         self._current_task: Optional[Dict] = None
         self._obs: Optional[Observation] = None
 
-    def reset(self, task_id: Optional[str] = None) -> Observation:
-        tid = task_id or self._task_id or random.choice(list(TASKS.keys()))
-        if tid not in TASKS:
-            raise ValueError(f"Unknown task_id '{tid}'. Available: {list(TASKS.keys())}")
+    def reset(self, task_id: Optional[str] = None, custom_task: Optional[Dict] = None) -> Observation:
+        if custom_task:
+            task = copy.deepcopy(custom_task)
+            tid = "custom_task"
+        else:
+            tid = task_id or self._task_id or random.choice(list(TASKS.keys()))
+            if tid not in TASKS:
+                raise ValueError(f"Unknown task_id '{tid}'. Available: {list(TASKS.keys())}")
+            task = copy.deepcopy(TASKS[tid])
 
-        task = copy.deepcopy(TASKS[tid])
         self._current_task = task
         self._task_id = tid
 

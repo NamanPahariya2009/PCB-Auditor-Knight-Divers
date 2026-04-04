@@ -216,11 +216,11 @@ docker run -p 7860:7860 \
 
 The `inference.py` script uses an LLM to automatically audit all 3 tasks and reports scores.
 
-### 1. Get a Free API Key
+### 1. Get an OpenRouter API Key
 
-1. Go to [openrouter.ai](https://openrouter.ai) → Sign up (free)
+1. Go to [openrouter.ai](https://openrouter.ai) → Sign up
 2. Go to **Keys** → Create a new key
-3. Copy the key — this is your `HF_TOKEN`
+3. Copy the key — this is your `OPENROUTER_API_KEY`
 
 ### 2. Set Environment Variables
 
@@ -228,8 +228,8 @@ The `inference.py` script uses an LLM to automatically audit all 3 tasks and rep
 <summary><strong>Windows (PowerShell)</strong></summary>
 
 ```powershell
-$env:HF_TOKEN = "sk-or-v1-your-key-here"
-$env:MODEL_NAME = "google/gemma-3-27b-it:free"
+$env:OPENROUTER_API_KEY = "sk-or-v1-your-key-here"
+$env:MODEL_NAME = "google/gemini-3-flash-preview"
 $env:API_BASE_URL = "https://openrouter.ai/api/v1"
 ```
 
@@ -239,9 +239,9 @@ $env:API_BASE_URL = "https://openrouter.ai/api/v1"
 <summary><strong>Windows (Command Prompt)</strong></summary>
 
 ```cmd
-set HF_TOKEN=sk-or-v1-your-key-here
-set MODEL_NAME=google/gemma-3-27b-it:free
-set API_BASE_URL=https://openrouter.ai/api/v1
+set OPENROUTER_API_KEY=sk-or-v1-your-key-here
+set MODEL_NAME=google/gemini-3-flash-preview
+set API_BASE_URL=https://openrouter.ai/api/v1"
 ```
 
 </details>
@@ -250,9 +250,9 @@ set API_BASE_URL=https://openrouter.ai/api/v1
 <summary><strong>macOS / Linux</strong></summary>
 
 ```bash
-export HF_TOKEN=sk-or-v1-your-key-here
-export MODEL_NAME=google/gemma-3-27b-it:free
-export API_BASE_URL=https://openrouter.ai/api/v1
+export OPENROUTER_API_KEY=sk-or-v1-your-key-here
+export MODEL_NAME=google/gemini-3-flash-preview
+export API_BASE_URL=https://openrouter.ai/api/v1"
 ```
 
 </details>

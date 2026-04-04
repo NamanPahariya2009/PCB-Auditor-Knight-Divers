@@ -1,0 +1,34 @@
+{
+  "model": "google/gemini-3-flash-preview",
+  "results": [
+    {
+      "task_id": "task_voltage_mismatch",
+      "difficulty": "easy",
+      "final_score": 1.0,
+      "steps_taken": 2,
+      "grader_message": "\u2713 Voltage check performed. | \u2713 Verdict correctly identifies voltage mismatch."
+    },
+    {
+      "task_id": "task_multi_violation",
+      "difficulty": "medium",
+      "final_score": 1.0,
+      "steps_taken": 3,
+      "grader_message": "\u2713 Voltage check performed. | \u2713 Short circuit check performed. | \u2713 Verdict identifies voltage violation. | \u2713 Verdict identifies short circuit."
+    },
+    {
+      "task_id": "task_full_audit",
+      "difficulty": "hard",
+      "final_score": 1.0,
+      "steps_taken": 4,
+      "grader_message": "Checks performed: 3/3. | \u2713 Voltage mismatch found. | \u2713 Short circuit found. | \u2713 Overcurrent violation found."
+    },
+    {
+      "task_id": "task_industrial_mcu",
+      "difficulty": "expert",
+      "final_score": 1.0,
+      "steps_taken": 4,
+      "grader_message": "\u2713 Voltage mismatch found. | \u2713 Overcurrent found. | \u2713 Decoupling violation found."
+    }
+  ],
+  "average": 1.0
+}

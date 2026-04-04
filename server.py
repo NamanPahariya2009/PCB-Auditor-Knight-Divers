@@ -95,20 +95,16 @@ def health():
 
 # ── GRAPH GENERATOR ───────────────────────────────────────────
 
-def generate_pcb_graph(task_id: str, violation_paths: list):
+def generate_pcb_graph(task_dict: dict, violation_paths: list):
     """
     Build NetworkX topology map.
     Highlights entire violation PATHS in Safety Orange (#FF6B00)
     instead of just start/end nodes.
     """
-    if task_id not in TASKS:
-        return None
-
-    task = TASKS[task_id]
-    components = {c["id"]: c for c in task["components"]}
+    components = {c["id"]: c for c in task_dict["components"]}
 
     G = nx.DiGraph()
-    for conn in task["netlist"]:
+    for conn in task_dict["netlist"]:
         G.add_edge(conn["from"], conn["to"],
                    protection=conn.get("protection", True))
 
@@ -157,7 +153,7 @@ def generate_pcb_graph(task_id: str, violation_paths: list):
                                width=3.5, ax=ax, style="dashed")
 
     ax.set_title(
-        f"PCB TOPOLOGY — {task_id.upper().replace('_', ' ')}",
+        f"PCB TOPOLOGY — {task_dict.get('id', 'CUSTOM').upper().replace('_', ' ')}",
         color="white", fontsize=13, fontweight="bold", pad=12
     )
 
@@ -175,10 +171,19 @@ def generate_pcb_graph(task_id: str, violation_paths: list):
 
 # ── GRADIO HUD ────────────────────────────────────────────────
 
-def run_audit(task_id: str, check_type: str, verdict: str):
+def run_audit(task_id: str, check_type: str, verdict: str, custom_json: str = ""):
     """Run a full mini-episode and return audit log + graph."""
+    import json
     env = PCBAuditorEnv()
-    env.reset(task_id=task_id)
+    
+    custom_task = None
+    if custom_json and custom_json.strip():
+        try:
+            custom_task = json.loads(custom_json)
+        except Exception as e:
+            return f"❌ **JSON ERROR:** Failed to parse custom netlist.\n```\n{str(e)}\n```", None
+
+    obs = env.reset(task_id=task_id, custom_task=custom_task)
 
     # Step 1: run the requested check
     action = Action(check_type=check_type)
@@ -200,7 +205,7 @@ def run_audit(task_id: str, check_type: str, verdict: str):
         log_lines.append(f"\n### Final Score: `{score:.2f}/1.00`  [{bar}]")
         log_lines.append(f"\n**{info.get('grader_message', '')}**")
 
-    fig = generate_pcb_graph(task_id, obs.violation_paths)
+    fig = generate_pcb_graph(env._current_task, obs.violation_paths)
     return "\n\n".join(log_lines), fig
 
 
@@ -221,7 +226,12 @@ with gr.Blocks() as hud:
                     )
                 with gr.Tab("Live Fire (Custom)"):
                     gr.Markdown("*Judges: Paste a custom JSON netlist here to test the deterministic engine on the fly.*")
-                    custom_json = gr.Code(language="json", lines=5, label="Custom Netlist JSON")
+                    custom_json = gr.Code(
+                        language="json",
+                        lines=5,
+                        label="Custom Netlist JSON",
+                        value='{\n  "description": "Custom Audit: Trace a path.",\n  "components": [\n    {"id": "VCC", "type": "POWER_SUPPLY", "voltage": 5.0},\n    {"id": "GND", "type": "GROUND", "voltage": 0.0}\n  ],\n  "netlist": [\n    {"from": "VCC", "to": "GND", "net": "SHORT_NET", "protection": false}\n  ],\n  "violations": ["SHORT_CIRCUIT:VCC->GND"]\n}'
+                    )
 
             check_dropdown = gr.Dropdown(
                 choices=["check_voltage_mismatch", "check_short_circuit", "check_component_rating", "check_missing_decoupling"],
@@ -240,7 +250,7 @@ with gr.Blocks() as hud:
 
     scan_btn.click(
         fn=run_audit,
-        inputs=[task_dropdown, check_dropdown, verdict_box],
+        inputs=[task_dropdown, check_dropdown, verdict_box, custom_json],
         outputs=[result_out, graph_out],
     )
 

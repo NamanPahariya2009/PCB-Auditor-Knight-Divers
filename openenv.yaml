@@ -3,8 +3,8 @@ version: "1.0.0"
 description: >
   A real-world PCB netlist safety audit environment where an AI agent
   must identify dangerous hardware violations (voltage mismatches,
-  short circuits, overcurrent conditions) across three tasks of
-  increasing difficulty before a board goes to manufacturing.
+  short circuits, overcurrent conditions, and missing decoupling)
+  across four tasks of increasing difficulty before a board goes to manufacturing.
 
 authors:
   - name: Naman Pahariya
@@ -39,6 +39,12 @@ tasks:
     max_steps: 7
     violations: 3
 
+  - id: task_industrial_mcu
+    difficulty: expert
+    description: "Expert level: Advanced heuristics for decoupling + 2 other violations"
+    max_steps: 8
+    violations: 3
+
 observation_space:
   type: object
   fields:
@@ -62,6 +68,7 @@ action_space:
         - check_voltage_mismatch
         - check_short_circuit
         - check_component_rating
+        - check_missing_decoupling
         - submit_verdict
     target_nets: "list[str] | null"
     verdict: "string | null"

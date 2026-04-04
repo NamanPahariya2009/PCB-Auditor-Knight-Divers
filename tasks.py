@@ -116,6 +116,39 @@ TASKS: Dict[str, Dict[str, Any]] = {
             {"from": "SD_CARD_U5",   "to": "GND",           "net": "GND_RAIL",   "current_ma": 140, "protection": True},
         ],
     },
+
+    # ── TASK 4: EXPERT — Heuristics + Multiple Violations ──────
+    "task_industrial_mcu": {
+        "description": (
+            "You are auditing a high-reliability industrial controller. "
+            "The board takes a 24V input and regulates it down for a sensitive MCU. "
+            "This task requires advanced heuristics. In addition to standard "
+            "electrical checks, ensure that high-speed digital components "
+            "have proper decoupling shielding. "
+            "Find all 3 violations: one voltage, one current, and one heuristic."
+        ),
+        "difficulty": "expert",
+        "max_steps": 8,
+        "violations": [
+            "VOLTAGE_MISMATCH:VINPUT_24V->SENSOR_IC_U3(24.0V>5.0V)",
+            "MISSING_DECOUPLING:MCU_U2",
+            "OVERCURRENT:REGULATOR_U1->MCU_U2(750mA>500mA)",
+        ],
+        "components": [
+            {"id": "VINPUT_24V",   "type": "POWER_SUPPLY",  "voltage": 24.0, "max_input_voltage": None, "max_current_ma": None},
+            {"id": "REGULATOR_U1", "type": "VOLTAGE_REG",   "voltage": 3.3,  "max_input_voltage": 30.0, "max_current_ma": 1000},
+            {"id": "MCU_U2",       "type": "MICROCONTROLLER","voltage": None, "max_input_voltage": 3.6,  "max_current_ma": 500},
+            {"id": "SENSOR_IC_U3", "type": "SENSOR_IC",     "voltage": None, "max_input_voltage": 5.0,  "max_current_ma": 30},
+            {"id": "GND",          "type": "GROUND",        "voltage": 0.0,  "max_input_voltage": None, "max_current_ma": None},
+        ],
+        "netlist": [
+            {"from": "VINPUT_24V",   "to": "SENSOR_IC_U3",  "net": "24V_RAIL",   "current_ma": 28,  "protection": True},
+            {"from": "VINPUT_24V",   "to": "REGULATOR_U1",  "net": "24V_RAIL",   "current_ma": 780, "protection": True},
+            {"from": "REGULATOR_U1", "to": "MCU_U2",        "net": "3V3_RAIL",   "current_ma": 750, "protection": True},
+            {"from": "MCU_U2",       "to": "GND",           "net": "GND_RAIL",   "current_ma": 750, "protection": True},
+            {"from": "SENSOR_IC_U3", "to": "GND",           "net": "GND_RAIL",   "current_ma": 28,  "protection": True},
+        ],
+    },
 }
 
 
@@ -149,6 +182,9 @@ def run_grader(
 
     elif task_id == "task_full_audit":
         return _grade_hard(expected, found, verdict_lower, checks_performed)
+
+    elif task_id == "task_industrial_mcu":
+        return _grade_industrial(expected, found, verdict_lower, checks_performed)
 
     return 0.0, "No grader defined for this task.", []
 
@@ -268,6 +304,43 @@ def _grade_hard(
         msgs.append("✓ Overcurrent violation found.")
     else:
         msgs.append("✗ Overcurrent violation missed.")
+
+    score = min(1.0, score)
+    return score, " | ".join(msgs), list(found)
+
+
+def _grade_industrial(
+    expected: set, found: set, verdict: str, checks: List[str]
+) -> Tuple[float, str, List[str]]:
+    """
+    Expert grader: Decoupling + Voltage + Current.
+    """
+    score = 0.0
+    msgs = []
+
+    # 1. Voltage mismatch
+    v_hit = any(kw in verdict for kw in ["24v", "sensor", "voltage mismatch"])
+    if v_hit:
+        score += 0.3
+        msgs.append("✓ Voltage mismatch found.")
+    else:
+        msgs.append("✗ Voltage mismatch missed.")
+
+    # 2. Overcurrent
+    c_hit = any(kw in verdict for kw in ["overcurrent", "750", "current rating"])
+    if c_hit:
+        score += 0.3
+        msgs.append("✓ Overcurrent found.")
+    else:
+        msgs.append("✗ Overcurrent missed.")
+
+    # 3. Decoupling
+    d_hit = "check_missing_decoupling" in checks and any(kw in verdict for kw in ["decoupling", "capacitor", "missing cap"])
+    if d_hit:
+        score += 0.4
+        msgs.append("✓ Decoupling violation found.")
+    else:
+        msgs.append("✗ Decoupling violation missed.")
 
     score = min(1.0, score)
     return score, " | ".join(msgs), list(found)

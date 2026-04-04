@@ -15,19 +15,24 @@ import os
 import json
 import time
 import requests
+from dotenv import load_dotenv
 from openai import OpenAI
+
+# Load environment variables from .env file
+load_dotenv()
 from environment import PCBAuditorEnv, Action
 from tasks import TASKS
 
 # ── CONFIG FROM ENVIRONMENT ───────────────────────────────────
 API_BASE_URL = os.environ.get("API_BASE_URL", "https://openrouter.ai/api/v1")
-MODEL_NAME   = os.environ.get("MODEL_NAME",   "google/gemma-3-27b-it:free")
-HF_TOKEN     = os.environ.get("HF_TOKEN",     "")
+MODEL_NAME   = os.environ.get("MODEL_NAME",   "google/gemini-3-flash-preview")
+# Check for OPENROUTER_API_KEY (local best practice) or HF_TOKEN (standard on HF Spaces)
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY") or os.environ.get("HF_TOKEN", "")
 
-# Use HF_TOKEN as the API key (works for OpenRouter — set HF_TOKEN = your OpenRouter key)
+# Initialize OpenAI client pointing to OpenRouter
 client = OpenAI(
     base_url=API_BASE_URL,
-    api_key=HF_TOKEN or "dummy-key",
+    api_key=OPENROUTER_API_KEY or "dummy-key",
 )
 
 SYSTEM_PROMPT = """You are an expert PCB hardware safety engineer.
@@ -37,6 +42,7 @@ You have access to these checks (call ONE per turn):
 - check_voltage_mismatch  : Find components receiving higher voltage than their rated input
 - check_short_circuit     : Find unprotected direct paths between power and ground
 - check_component_rating  : Find components carrying more current than their rated maximum
+- check_missing_decoupling : Find MCUs and critical logic ICs missing a 100nF decoupling capacitor
 - submit_verdict          : Submit your final audit verdict (do this last)
 
 Respond ONLY as a JSON object — no markdown, no extra text:
@@ -47,7 +53,7 @@ Respond ONLY as a JSON object — no markdown, no extra text:
 
 CRITICAL INSTRUCTION FOR VERDICT:
 To pass the safety audit, your verdict string MUST be highly specific. You MUST include:
-1. The exact violation terms (e.g., "voltage mismatch", "short circuit", "overcurrent").
+1. The exact violation terms (e.g., "voltage mismatch", "short circuit", "overcurrent", "missing decoupling").
 2. The exact numerical values involved (e.g., "9.0V", "3.3V", "24V", "5V", "750mA", "500mA").
 3. The exact component names and nets (e.g., "MCU_U1", "GND").
 Do not give vague summaries. List every violation with hard numbers.
@@ -148,9 +154,9 @@ def main():
     print(f"  API:   {API_BASE_URL}")
     print("="*60)
 
-    if not HF_TOKEN:
-        print("\n[WARNING] HF_TOKEN not set. Using dummy key — will fail on real API calls.")
-        print("Set HF_TOKEN to your OpenRouter API key to run real inference.\n")
+    if not OPENROUTER_API_KEY:
+        print("\n[WARNING] OPENROUTER_API_KEY not set. Using dummy key — will fail on real API calls.")
+        print("Set OPENROUTER_API_KEY in your .env file to run real inference.\n")
 
     results = []
     task_ids = list(TASKS.keys())
