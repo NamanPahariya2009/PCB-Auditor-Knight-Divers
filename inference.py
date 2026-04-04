@@ -2,11 +2,8 @@
 inference.py — PCB Auditor Baseline Inference Script
 Knight Divers | Naman Pahariya & Kapish Gupta
 
-Uses OpenAI-compatible client to run an LLM agent against all 3 tasks.
-Reads credentials from environment variables:
-  - API_BASE_URL   : OpenAI-compatible API endpoint
-  - MODEL_NAME     : Model identifier (e.g. google/gemma-3-27b-it:free)
-  - HF_TOKEN       : Hugging Face / API key
+COMPLIANCE: Meta PyTorch OpenEnv Hackathon
+This script outputs strict [START], [STEP], and [END] tags for automated evaluation.
 
 Run: python inference.py
 """
@@ -14,22 +11,17 @@ Run: python inference.py
 import os
 import json
 import time
-import requests
 from dotenv import load_dotenv
 from openai import OpenAI
 
-# Load environment variables from .env file
 load_dotenv()
 from environment import PCBAuditorEnv, Action
 from tasks import TASKS
 
-# ── CONFIG FROM ENVIRONMENT ───────────────────────────────────
 API_BASE_URL = os.environ.get("API_BASE_URL", "https://openrouter.ai/api/v1")
 MODEL_NAME   = os.environ.get("MODEL_NAME",   "google/gemini-3-flash-preview")
-# Check for OPENROUTER_API_KEY (local best practice) or HF_TOKEN (standard on HF Spaces)
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY") or os.environ.get("HF_TOKEN", "")
 
-# Initialize OpenAI client pointing to OpenRouter
 client = OpenAI(
     base_url=API_BASE_URL,
     api_key=OPENROUTER_API_KEY or "dummy-key",
@@ -45,46 +37,34 @@ You have access to these checks (call ONE per turn):
 - check_missing_decoupling : Find MCUs and critical logic ICs missing a 100nF decoupling capacitor
 - submit_verdict          : Submit your final audit verdict (do this last)
 
-Respond ONLY as a JSON object — no markdown, no extra text:
+Respond ONLY as a JSON object:
 {
   "check_type": "<check name or submit_verdict>",
   "verdict": "<required string when check_type is submit_verdict, empty string otherwise>"
 }
 
 CRITICAL INSTRUCTION FOR VERDICT:
-To pass the safety audit, your verdict string MUST be highly specific. You MUST include:
-1. The exact violation terms (e.g., "voltage mismatch", "short circuit", "overcurrent", "missing decoupling").
-2. The exact numerical values involved (e.g., "9.0V", "3.3V", "24V", "5V", "750mA", "500mA").
-3. The exact component names and nets (e.g., "MCU_U1", "GND").
-Do not give vague summaries. List every violation with hard numbers.
+To pass the safety audit, your verdict string MUST include:
+1. Exact violation terms ("voltage mismatch", "short circuit", "overcurrent", "missing decoupling").
+2. Exact numerical values ("9.0V", "3.3V", "750mA").
+3. Exact component names and nets.
 """
-
 
 def build_user_prompt(obs_dict: dict) -> str:
     return f"""TASK: {obs_dict['task_description']}
-
-COMPONENTS:
-{json.dumps(obs_dict['components'], indent=2)}
-
-NETLIST:
-{json.dumps(obs_dict['netlist'], indent=2)}
-
-CHECKS PERFORMED SO FAR: {obs_dict['checks_performed']}
-LAST CHECK RESULT: {obs_dict['last_check_result'] or 'None yet'}
-STEPS REMAINING: {obs_dict['max_steps'] - obs_dict['step_count']}
-
-What is your next action? Respond with JSON only."""
-
+COMPONENTS: {json.dumps(obs_dict['components'])}
+NETLIST: {json.dumps(obs_dict['netlist'])}
+CHECKS PERFORMED: {obs_dict['checks_performed']}
+LAST RESULT: {obs_dict['last_check_result'] or 'None'}
+STEPS LEFT: {obs_dict['max_steps'] - obs_dict['step_count']}
+Respond with JSON only."""
 
 def run_agent_on_task(task_id: str) -> dict:
-    """Run the LLM agent on a single task and return the result."""
     env = PCBAuditorEnv()
     obs = env.reset(task_id=task_id)
 
-    print(f"\n{'='*60}")
-    print(f"TASK: {task_id} | Difficulty: {TASKS[task_id]['difficulty'].upper()}")
-    print(f"{'='*60}")
-    print(f"Description: {obs.task_description[:120]}...")
+    # REQUIRED COMPLIANCE TAG
+    print(f"[START] Task: {task_id}")
 
     history = []
     final_score = 0.0
@@ -92,50 +72,41 @@ def run_agent_on_task(task_id: str) -> dict:
     steps_taken = 0
 
     for step_num in range(obs.max_steps):
-        # Build prompt
         user_content = build_user_prompt(obs.model_dump())
         history.append({"role": "user", "content": user_content})
 
-        # Call LLM
         try:
             response = client.chat.completions.create(
                 model=MODEL_NAME,
                 messages=[{"role": "system", "content": SYSTEM_PROMPT}] + history,
                 temperature=0.1,
                 max_tokens=256,
-                response_format={"type": "json_object"} # 👈 FORCES PURE JSON
+                response_format={"type": "json_object"}
             )
             raw = response.choices[0].message.content.strip()
             history.append({"role": "assistant", "content": raw})
             
-            # Use Pydantic to strictly validate the LLM output
             action_data = json.loads(raw)
             action = Action(**action_data)
 
         except Exception as e:
-            print(f"  [ERROR] LLM/Validation failed: {e}")
-            action = Action(check_type="submit_verdict", verdict="Audit failed due to component syntax error.")
+            action = Action(check_type="submit_verdict", verdict="Audit failed due to format error.")
 
-        print(f"\n  Step {step_num+1}: ACTION = {action.check_type}")
-        if action.verdict:
-            print(f"  Verdict: {action.verdict[:100]}...")
-
-        # Execute action
         obs, reward, done, info = env.step(action)
         steps_taken = step_num + 1
 
-        print(f"  Reward: {reward.value:.2f} | {reward.message[:80]}")
+        # REQUIRED COMPLIANCE TAG
+        print(f"[STEP] Action: {action.check_type} | Reward: {reward.value:.2f}")
 
         if done:
             final_score = info.get("final_score", reward.value)
             final_message = info.get("grader_message", reward.message)
             break
 
-        # Small delay to respect rate limits
         time.sleep(0.5)
 
-    print(f"\n  FINAL SCORE: {final_score:.2f}/1.00")
-    print(f"  {final_message}")
+    # REQUIRED COMPLIANCE TAG
+    print(f"[END] Final Score: {final_score:.2f}")
 
     return {
         "task_id": task_id,
@@ -145,47 +116,17 @@ def run_agent_on_task(task_id: str) -> dict:
         "grader_message": final_message,
     }
 
-
 def main():
-    print("\n" + "="*60)
-    print("  PCB AUDITOR — KNIGHT DIVERS")
-    print("  Baseline Inference Script")
-    print(f"  Model: {MODEL_NAME}")
-    print(f"  API:   {API_BASE_URL}")
-    print("="*60)
-
-    if not OPENROUTER_API_KEY:
-        print("\n[WARNING] OPENROUTER_API_KEY not set. Using dummy key — will fail on real API calls.")
-        print("Set OPENROUTER_API_KEY in your .env file to run real inference.\n")
-
+    print("Initializing Meta Hackathon Compliance Run...")
     results = []
-    task_ids = list(TASKS.keys())
+    for task_id in list(TASKS.keys()):
+        results.append(run_agent_on_task(task_id))
+        time.sleep(1)
 
-    for task_id in task_ids:
-        result = run_agent_on_task(task_id)
-        results.append(result)
-        time.sleep(1)  # Rate limit buffer between tasks
-
-    # ── SUMMARY ───────────────────────────────────────────────
-    print("\n" + "="*60)
-    print("  BASELINE RESULTS SUMMARY")
-    print("="*60)
-    total_score = 0.0
-    for r in results:
-        score_bar = "█" * int(r["final_score"] * 10) + "░" * (10 - int(r["final_score"] * 10))
-        print(f"  {r['task_id']:<30} [{score_bar}] {r['final_score']:.2f}")
-        total_score += r["final_score"]
-    avg = total_score / len(results) if results else 0.0
-    print(f"\n  Average Score: {avg:.2f}/1.00")
-    print("="*60)
-
-    # Save results to JSON for reproducibility
+    # Save results to JSON for baseline proof
+    avg = sum(r["final_score"] for r in results) / len(results) if results else 0.0
     with open("baseline_results.json", "w") as f:
         json.dump({"model": MODEL_NAME, "results": results, "average": avg}, f, indent=2)
-    print("\n  Results saved to baseline_results.json")
-
-    return results
-
 
 if __name__ == "__main__":
     main()
