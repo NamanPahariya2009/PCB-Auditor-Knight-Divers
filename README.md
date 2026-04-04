@@ -86,69 +86,184 @@ The reward function provides **dense partial progress signals** throughout the e
 
 ---
 
-## 🚀 Setup & Usage
+## 🚀 Running Locally
 
-### Local Development
+### Prerequisites
+
+| Requirement | Version | Check |
+|---|---|---|
+| **Python** | 3.10 or newer | `python --version` |
+| **pip** | any recent | `pip --version` |
+| **Git** | any | `git --version` |
+| **Docker** *(optional)* | 20+ | `docker --version` |
+
+> **Note:** The Gradio UI and FastAPI server run entirely on Python — no Node.js or frontend build step is needed.
+
+### Step 1 — Clone the Repository
 
 ```bash
-git clone https://github.com/NamanPahariya2009/PCB-Auditor-Knight-Divers
+git clone https://github.com/NamanPahariya2009/PCB-Auditor-Knight-Divers.git
 cd PCB-Auditor-Knight-Divers
-pip install -r requirements.txt
-python server.py
-# Visit http://localhost:7860
 ```
 
-### API Usage (OpenEnv Spec)
+### Step 2 — Create a Virtual Environment
 
-```python
-import requests
+Creating a virtual environment keeps your system Python clean.
 
-# Start episode
-obs = requests.post("http://localhost:7860/reset", json={"task_id": "task_voltage_mismatch"}).json()
+<details>
+<summary><strong>Windows (PowerShell)</strong></summary>
 
-# Step: run a check
-result = requests.post("http://localhost:7860/step", json={
-    "check_type": "check_voltage_mismatch"
-}).json()
-
-# Step: submit verdict
-result = requests.post("http://localhost:7860/step", json={
-    "check_type": "submit_verdict",
-    "verdict": "9V power rail connected to 3.3V MCU input — critical voltage mismatch."
-}).json()
-
-print(result["reward"]["value"])   # 0.0 - 1.0
+```powershell
+python -m venv venv
+.\venv\Scripts\Activate.ps1
 ```
 
-### Docker
+> If you get a script-execution error, run:
+> `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` and try again.
+
+</details>
+
+<details>
+<summary><strong>Windows (Command Prompt)</strong></summary>
+
+```cmd
+python -m venv venv
+venv\Scripts\activate.bat
+```
+
+</details>
+
+<details>
+<summary><strong>macOS / Linux</strong></summary>
 
 ```bash
+python3 -m venv venv
+source venv/bin/activate
+```
+
+</details>
+
+### Step 3 — Install Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+This installs:
+
+| Package | Purpose |
+|---|---|
+| `fastapi` + `uvicorn` | REST API server |
+| `gradio` | Interactive web UI (HUD) |
+| `pydantic` | Typed models for observation/action/reward |
+| `networkx` + `matplotlib` | PCB graph generation & visualization |
+| `openai` | LLM client for baseline inference |
+| `requests` | HTTP calls inside inference script |
+| `numpy` | Numerical support |
+| `pyyaml` | YAML config parsing |
+
+### Step 4 — Start the Server
+
+```bash
+python server.py
+```
+
+You should see output like:
+
+```
+INFO:     Uvicorn running on http://0.0.0.0:7860
+```
+
+Open **http://localhost:7860** in your browser to access the Gradio HUD.
+
+### Step 5 — Use the Gradio HUD
+
+1. **Select a Task** from the dropdown (e.g. `task_voltage_mismatch`)
+2. **Select a Check Type** (e.g. `check_voltage_mismatch`)
+3. **Write a Verdict** describing the violations you expect
+4. Click **🚀 RUN AUDIT**
+5. View the **Audit Log** and **PCB Topology Graph** with violation paths highlighted in orange
+
+---
+
+## 🐳 Running with Docker
+
+If you prefer Docker, no Python setup is needed on your host machine.
+
+```bash
+# Build the image
 docker build -t pcb-auditor .
+
+# Run the container
+docker run -p 7860:7860 pcb-auditor
+```
+
+Then open **http://localhost:7860**.
+
+To run inference inside the container, pass your API key:
+
+```bash
 docker run -p 7860:7860 \
   -e HF_TOKEN=your_openrouter_key \
   -e MODEL_NAME=google/gemma-3-27b-it:free \
+  -e API_BASE_URL=https://openrouter.ai/api/v1 \
   pcb-auditor
 ```
 
 ---
 
-## 📊 Baseline Inference
+## 🤖 Running Baseline Inference
 
-### Get a Free API Key
+The `inference.py` script uses an LLM to automatically audit all 3 tasks and reports scores.
+
+### 1. Get a Free API Key
 
 1. Go to [openrouter.ai](https://openrouter.ai) → Sign up (free)
 2. Go to **Keys** → Create a new key
 3. Copy the key — this is your `HF_TOKEN`
 
-### Run Baseline
+### 2. Set Environment Variables
+
+<details>
+<summary><strong>Windows (PowerShell)</strong></summary>
+
+```powershell
+$env:HF_TOKEN = "sk-or-v1-your-key-here"
+$env:MODEL_NAME = "google/gemma-3-27b-it:free"
+$env:API_BASE_URL = "https://openrouter.ai/api/v1"
+```
+
+</details>
+
+<details>
+<summary><strong>Windows (Command Prompt)</strong></summary>
+
+```cmd
+set HF_TOKEN=sk-or-v1-your-key-here
+set MODEL_NAME=google/gemma-3-27b-it:free
+set API_BASE_URL=https://openrouter.ai/api/v1
+```
+
+</details>
+
+<details>
+<summary><strong>macOS / Linux</strong></summary>
 
 ```bash
 export HF_TOKEN=sk-or-v1-your-key-here
 export MODEL_NAME=google/gemma-3-27b-it:free
 export API_BASE_URL=https://openrouter.ai/api/v1
+```
 
+</details>
+
+### 3. Run
+
+```bash
 python inference.py
 ```
+
+Results are saved to `baseline_results.json`.
 
 ### Baseline Scores (google/gemma-3-27b-it:free)
 
@@ -161,6 +276,46 @@ python inference.py
 
 ---
 
+## 🔌 API Endpoints (OpenEnv Spec)
+
+All endpoints are available at `http://localhost:7860` once the server is running.
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/reset` | Start a new episode (optionally pass `{"task_id": "..."}`) |
+| `POST` | `/step` | Execute an action (`check_type`, `target_nets`, `verdict`) |
+| `GET` | `/state` | Get current environment state |
+| `GET` | `/tasks` | List all available tasks with metadata |
+| `GET` | `/health` | Health check |
+
+### Example: Full Episode via API
+
+```python
+import requests
+
+BASE = "http://localhost:7860"
+
+# 1. Reset — start a new episode
+obs = requests.post(f"{BASE}/reset", json={"task_id": "task_voltage_mismatch"}).json()
+print("Task:", obs["task_description"])
+
+# 2. Step — run a safety check
+result = requests.post(f"{BASE}/step", json={
+    "check_type": "check_voltage_mismatch"
+}).json()
+print("Check result:", result["observation"]["last_check_result"])
+
+# 3. Step — submit final verdict
+result = requests.post(f"{BASE}/step", json={
+    "check_type": "submit_verdict",
+    "verdict": "9V power rail connected to 3.3V MCU input — critical voltage mismatch."
+}).json()
+print("Score:", result["reward"]["value"])   # 0.0 – 1.0
+print("Message:", result["reward"]["message"])
+```
+
+---
+
 ## 📁 Project Structure
 
 ```
@@ -170,10 +325,24 @@ python inference.py
 ├── server.py          # FastAPI server + Gradio HUD
 ├── inference.py       # OpenAI-client baseline agent
 ├── openenv.yaml       # OpenEnv metadata spec
-├── requirements.txt
-├── Dockerfile
-└── README.md
+├── requirements.txt   # Python dependencies
+├── Dockerfile         # Docker image definition
+└── README.md          # This file
 ```
+
+---
+
+## 🛠️ Troubleshooting
+
+| Problem | Solution |
+|---|---|
+| `python` not found | Use `python3` instead (macOS/Linux), or add Python to your system PATH |
+| `pip install` fails on Windows | Try `python -m pip install -r requirements.txt` |
+| Port 7860 already in use | Kill the process using port 7860, or edit `server.py` to change the port |
+| PowerShell blocks `Activate.ps1` | Run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` |
+| `ModuleNotFoundError` | Make sure your virtual environment is activated before running |
+| Inference returns dummy results | Set `HF_TOKEN` to a valid OpenRouter API key |
+| Docker build fails | Ensure Docker Desktop is running and you have internet access |
 
 ---
 
