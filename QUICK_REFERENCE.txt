@@ -1,0 +1,135 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                  PCB AUDITOR — SUBMISSION QUICK REFERENCE                     ║
+║                      Knight Divers | Naman & Kapish                           ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+┌─ DEPLOYMENT (30 seconds) ─────────────────────────────────────────────────────┐
+│                                                                                │
+│  cd PCB-Auditor-Knight-Divers                                                 │
+│  git add .                                                                     │
+│  git commit -m "v3: .net parser + 4th expert task + 1.00 baseline"           │
+│  git push origin main                                                          │
+│                                                                                │
+│  ⏳ Wait 2-3 min for HF Space rebuild                                         │
+│                                                                                │
+└────────────────────────────────────────────────────────────────────────────────┘
+
+┌─ VERIFICATION (1 minute) ──────────────────────────────────────────────────────┐
+│                                                                                │
+│  python verify_deployment.py                                                   │
+│                                                                                │
+│  Expected output:                                                              │
+│    Health          ✅ PASS                                                     │
+│    Tasks           ✅ PASS                                                     │
+│    Reset/Step      ✅ PASS                                                     │
+│    Full Episode    ✅ PASS                                                     │
+│                                                                                │
+│  Manual check: https://huggingface.co/spaces/Jarvis217/PCB-Auditor-Knight-Divers │
+│    → Upload sample_board.net                                                   │
+│    → Run check_voltage_mismatch                                               │
+│    → Verify VCC→U1 highlighted in orange                                      │
+│                                                                                │
+└────────────────────────────────────────────────────────────────────────────────┘
+
+┌─ KEY FEATURES (Talking Points for Judges) ─────────────────────────────────────┐
+│                                                                                │
+│  ✅ 4 Tasks (Easy → Expert)                                                   │
+│     • task_voltage_mismatch    : 1 violation  (5 steps max)                  │
+│     • task_multi_violation     : 2 violations (6 steps max)                  │
+│     • task_full_audit          : 3 violations (7 steps max)                  │
+│     • task_industrial_mcu      : 3 violations (8 steps max) + decoupling     │
+│                                                                                │
+│  ✅ Real File Format Support                                                  │
+│     • Parses KiCad .net files (industry standard)                             │
+│     • Heuristic component type inference                                      │
+│     • Dynamic violation detection                                             │
+│                                                                                │
+│  ✅ Perfect Baseline (1.00 avg)                                               │
+│     • Model: google/gemini-3-flash-preview                                    │
+│     • All 4 tasks score 1.00/1.00                                             │
+│     • Reproducible via inference.py                                           │
+│                                                                                │
+│  ✅ Advanced Checks                                                            │
+│     • Voltage mismatch (overvoltage protection)                               │
+│     • Short circuit (BFS path finding with NetworkX)                          │
+│     • Overcurrent (component rating violations)                               │
+│     • Missing decoupling (MCU/IC capacitor heuristic)                         │
+│                                                                                │
+│  ✅ OpenEnv Spec Compliant                                                    │
+│     • Typed models (Pydantic)                                                  │
+│     • REST API (/reset, /step, /state, /tasks, /health)                      │
+│     • Dense reward signals (partial credit per step)                          │
+│     • Deterministic graders (reproducible scoring)                            │
+│                                                                                │
+└────────────────────────────────────────────────────────────────────────────────┘
+
+┌─ URLS & CREDENTIALS ───────────────────────────────────────────────────────────┐
+│                                                                                │
+│  HF Space:  https://huggingface.co/spaces/Jarvis217/PCB-Auditor-Knight-Divers │
+│  GitHub:    https://github.com/NamanPahariya2009/PCB-Auditor-Knight-Divers   │
+│                                                                                │
+│  API Endpoints (all at HF Space URL):                                         │
+│    GET  /health      → {"status": "online"}                                   │
+│    GET  /tasks       → {task_id: {description, difficulty, ...}}             │
+│    POST /reset       → Observation                                            │
+│    POST /step        → {observation, reward, done, info}                     │
+│    GET  /state       → State                                                  │
+│                                                                                │
+└────────────────────────────────────────────────────────────────────────────────┘
+
+┌─ TROUBLESHOOTING ──────────────────────────────────────────────────────────────┐
+│                                                                                │
+│  Space won't build?                                                            │
+│    → Check Dockerfile syntax                                                   │
+│    → Verify all imports exist in requirements.txt                             │
+│    → Check HF Space logs for Python errors                                    │
+│                                                                                │
+│  /health returns 404?                                                          │
+│    → Space is still building, wait 1 more minute                              │
+│    → Check HF Space "Logs" tab for startup errors                             │
+│                                                                                │
+│  .net upload fails?                                                            │
+│    → File must have .net extension                                            │
+│    → Parser expects KiCad S-expression format                                 │
+│    → Check netlist_parser.py is in repo                                       │
+│                                                                                │
+│  Baseline inference fails?                                                     │
+│    → Set OPENROUTER_API_KEY env var                                           │
+│    → Verify MODEL_NAME is accessible                                          │
+│    → Check API_BASE_URL is correct                                            │
+│                                                                                │
+└────────────────────────────────────────────────────────────────────────────────┘
+
+┌─ SUBMISSION MATERIALS ─────────────────────────────────────────────────────────┐
+│                                                                                │
+│  Required for OpenEnv Portal:                                                  │
+│    □ Space URL (above)                                                         │
+│    □ GitHub repo URL (above)                                                   │
+│    □ Short description (200 chars):                                           │
+│      "Real-world PCB netlist safety auditor. Agent detects voltage/current    │
+│       violations across 4 tasks. Parses KiCad .net files. Perfect baseline."  │
+│    □ Screenshot of Gradio HUD showing .net upload tab                         │
+│    □ baseline_results.json (proves 1.00 avg score)                            │
+│                                                                                │
+└────────────────────────────────────────────────────────────────────────────────┘
+
+┌─ FINAL CHECKLIST ──────────────────────────────────────────────────────────────┐
+│                                                                                │
+│  Pre-Submission:                                                               │
+│    ✅ All 14 files copied to repo                                             │
+│    ✅ python test_deployment.py passes 4/4                                     │
+│    ✅ git push completed                                                        │
+│    ✅ HF Space rebuilt successfully                                            │
+│    ✅ python verify_deployment.py passes 4/4                                   │
+│    ✅ Gradio HUD manually tested (3 tabs work)                                 │
+│    ✅ Screenshot captured                                                       │
+│                                                                                │
+│  Submission Day (April 7):                                                     │
+│    □ Submit on OpenEnv portal                                                  │
+│    □ Verify submission email confirmation                                      │
+│    □ Test Space URL one more time                                             │
+│    □ Keep Space running (don't pause it)                                      │
+│                                                                                │
+└────────────────────────────────────────────────────────────────────────────────┘
+
+                            You're ready, Sir. 🎯

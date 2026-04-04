@@ -171,13 +171,21 @@ def generate_pcb_graph(task_dict: dict, violation_paths: list):
 
 # ── GRADIO HUD ────────────────────────────────────────────────
 
-def run_audit(task_id: str, check_type: str, verdict: str, custom_json: str = ""):
+def run_audit(task_id: str, check_type: str, verdict: str, custom_json: str = "", netlist_file = None):
     """Run a full mini-episode and return audit log + graph."""
     import json
     env = PCBAuditorEnv()
     
     custom_task = None
-    if custom_json and custom_json.strip():
+    
+    # Priority: .net file > JSON > built-in task
+    if netlist_file and netlist_file.name.endswith(".net"):
+        try:
+            from netlist_parser import parse_kicad_netlist
+            custom_task = parse_kicad_netlist(netlist_file.name)
+        except Exception as e:
+            return f"❌ **.net PARSE ERROR:** {str(e)}", None
+    elif custom_json and custom_json.strip():
         try:
             custom_task = json.loads(custom_json)
         except Exception as e:
@@ -224,7 +232,7 @@ with gr.Blocks() as hud:
                     task_dropdown = gr.Dropdown(
                         choices=list(TASKS.keys()), value="task_voltage_mismatch", label="Select Task"
                     )
-                with gr.Tab("Live Fire (Custom)"):
+                with gr.Tab("Live Fire (JSON)"):
                     gr.Markdown("*Judges: Paste a custom JSON netlist here to test the deterministic engine on the fly.*")
                     custom_json = gr.Code(
                         language="json",
@@ -232,6 +240,9 @@ with gr.Blocks() as hud:
                         label="Custom Netlist JSON",
                         value='{\n  "description": "Custom Audit: Trace a path.",\n  "components": [\n    {"id": "VCC", "type": "POWER_SUPPLY", "voltage": 5.0},\n    {"id": "GND", "type": "GROUND", "voltage": 0.0}\n  ],\n  "netlist": [\n    {"from": "VCC", "to": "GND", "net": "SHORT_NET", "protection": false}\n  ],\n  "violations": ["SHORT_CIRCUIT:VCC->GND"]\n}'
                     )
+                with gr.Tab("Upload .net File"):
+                    gr.Markdown("*Upload a KiCad .net file for real-world netlist parsing.*")
+                    netlist_upload = gr.File(label="Upload KiCad .net", file_types=[".net"])
 
             check_dropdown = gr.Dropdown(
                 choices=["check_voltage_mismatch", "check_short_circuit", "check_component_rating", "check_missing_decoupling"],
@@ -250,7 +261,7 @@ with gr.Blocks() as hud:
 
     scan_btn.click(
         fn=run_audit,
-        inputs=[task_dropdown, check_dropdown, verdict_box, custom_json],
+        inputs=[task_dropdown, check_dropdown, verdict_box, custom_json, netlist_upload],
         outputs=[result_out, graph_out],
     )
 

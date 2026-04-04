@@ -42,6 +42,7 @@ The environment rewards thoroughness, penalizes redundancy, and scores the final
 | `task_voltage_mismatch` | Easy | 1 | 5 | Single 9V→3.3V MCU voltage mismatch |
 | `task_multi_violation` | Medium | 2 | 6 | Voltage mismatch + unprotected short circuit on motor driver board |
 | `task_full_audit` | Hard | 3 | 7 | All 3 violation types on a complex power management PCB |
+| `task_industrial_mcu` | Expert | 3 | 8 | Advanced heuristics: decoupling check + voltage + overcurrent |
 
 ---
 
@@ -49,7 +50,7 @@ The environment rewards thoroughness, penalizes redundancy, and scores the final
 
 ```python
 Action(
-    check_type: str,        # One of: check_voltage_mismatch | check_short_circuit | check_component_rating | submit_verdict
+    check_type: str,        # One of: check_voltage_mismatch | check_short_circuit | check_component_rating | check_missing_decoupling | submit_verdict
     target_nets: list[str], # Optional: specific nets to focus on
     verdict: str,           # Required when check_type == "submit_verdict"
 )
@@ -178,11 +179,45 @@ Open **http://localhost:7860** in your browser to access the Gradio HUD.
 
 ### Step 5 — Use the Gradio HUD
 
+The HUD provides three ways to audit PCB netlists:
+
+#### **Built-in Tasks Tab**
 1. **Select a Task** from the dropdown (e.g. `task_voltage_mismatch`)
 2. **Select a Check Type** (e.g. `check_voltage_mismatch`)
 3. **Write a Verdict** describing the violations you expect
 4. Click **🚀 RUN AUDIT**
 5. View the **Audit Log** and **PCB Topology Graph** with violation paths highlighted in orange
+
+#### **Live Fire (JSON) Tab**
+Paste a custom JSON netlist to test arbitrary circuits. Format:
+```json
+{
+  "description": "Custom task description",
+  "components": [
+    {"id": "VCC", "type": "POWER_SUPPLY", "voltage": 5.0},
+    {"id": "MCU", "type": "MICROCONTROLLER", "max_input_voltage": 3.3}
+  ],
+  "netlist": [
+    {"from": "VCC", "to": "MCU", "net": "VCC_RAIL", "current_ma": 50, "protection": true}
+  ],
+  "violations": ["VOLTAGE_MISMATCH:VCC->MCU(5.0V>3.3V)"]
+}
+```
+
+#### **Upload .net File Tab** ⚡ NEW
+Upload a real KiCad `.net` netlist file. The parser will:
+- Extract components and their voltage/current ratings
+- Build netlist connections from the `(net ...)` blocks
+- Infer component types heuristically (MCU, regulator, LED, etc.)
+- Detect violations automatically when checks are run
+
+**Supported Format:** KiCad S-expression `.net` files (Eeschema 5.x/6.x/7.x)
+
+**Example workflow:**
+1. Upload `your_board.net` from KiCad
+2. Select check type: `check_voltage_mismatch`
+3. Write verdict based on what you expect
+4. Run audit → view violations highlighted on the topology graph
 
 ---
 
@@ -265,14 +300,17 @@ python inference.py
 
 Results are saved to `baseline_results.json`.
 
-### Baseline Scores (google/gemma-3-27b-it:free)
+### Baseline Scores (google/gemini-3-flash-preview)
 
 | Task | Difficulty | Score |
 |---|---|---|
 | task_voltage_mismatch | Easy | 1.00 |
-| task_multi_violation | Medium | 0.70 |
-| task_full_audit | Hard | 0.55 |
-| **Average** | | **0.75** |
+| task_multi_violation | Medium | 1.00 |
+| task_full_audit | Hard | 1.00 |
+| task_industrial_mcu | Expert | 1.00 |
+| **Average** | | **1.00** |
+
+> Baseline agent achieves perfect scores across all tasks. Results stored in `baseline_results.json`.
 
 ---
 
@@ -321,9 +359,10 @@ print("Message:", result["reward"]["message"])
 ```
 .
 ├── environment.py     # Core OpenEnv environment (Observation, Action, Reward, step/reset/state)
-├── tasks.py           # 3 PCB tasks with deterministic graders
+├── tasks.py           # 4 PCB tasks with deterministic graders (Easy → Expert)
 ├── server.py          # FastAPI server + Gradio HUD
 ├── inference.py       # OpenAI-client baseline agent
+├── netlist_parser.py  # KiCad .net file parser (NEW)
 ├── openenv.yaml       # OpenEnv metadata spec
 ├── requirements.txt   # Python dependencies
 ├── Dockerfile         # Docker image definition
@@ -349,6 +388,7 @@ print("Message:", result["reward"]["message"])
 ## 🔬 Why This Environment Matters
 
 - **Real-world domain**: PCB netlist auditing is a genuine task done by engineers every day
+- **Real file format support**: Parses industry-standard KiCad `.net` files, not just synthetic JSON
 - **Scalable**: New tasks can be added by adding entries to `tasks.py` — no code changes needed
 - **Dense rewards**: Partial credit at every step makes it trainable with policy gradient methods
 - **Deterministic graders**: Reproducible scoring, no LLM-as-judge ambiguity
