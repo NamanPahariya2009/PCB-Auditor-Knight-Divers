@@ -17,7 +17,7 @@ import sys
 import time
 
 # Production URL (HF Space)
-PROD_URL = "https://jarvis217-pcb-auditor-knight-divers.hf.space"
+PROD_URL = "https://namanpahariya2009-pcb-auditor-knight-divers.hf.space"
 LOCAL_URL = "http://localhost:7860"
 
 
