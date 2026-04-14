@@ -1,0 +1,19 @@
+In environment.py, make these changes:
+
+1. Line 230 (step method clamp):
+   OLD: reward.value = max(0.16, min(0.84, float(reward.value)))
+   NEW: reward.value = max(0.17, min(0.83, float(reward.value)))
+
+2. Line 234-237 (info clamps):
+   OLD: info["score"] = max(0.16, min(0.84, float(info["score"])))
+   OLD: info["final_score"] = max(0.16, min(0.84, float(info["final_score"])))
+   NEW: info["score"] = max(0.17, min(0.83, float(info["score"])))
+   NEW: info["final_score"] = max(0.17, min(0.83, float(info["final_score"])))
+
+3. Line 244 (Reward model defaults):
+   OLD: partial_credit: float = Field(default=0.15)
+   NEW: partial_credit: float = Field(default=0.17)
+
+4. All Reward() constructor calls - replace 0.15/0.16 with 0.17
+
+5. All _safe_score() calls - replace with max(0.17, min(0.83, ...))

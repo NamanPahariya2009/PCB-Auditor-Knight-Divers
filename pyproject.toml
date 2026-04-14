@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pcb-auditor"
+version = "0.9.9"
+description = "PCB Safety Auditor Environment for OpenEnv"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+  { name = "Naman Pahariya" }
+]
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn>=0.3",
+    "pydantic>=2.5",
+    "pyyaml>=6.0.1",
+    "openai>=1.30",
+    "gradio>=4.44",
+    "networkx>=3.3",
+    "matplotlib>=3.9",
+    "numpy>=1.26",
+    "requests>=2.31",
+    "python-dotenv",
+    "openenv>=0.1"
+]
+
+[project.scripts]
+server = "server.app:main"

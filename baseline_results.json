@@ -1,0 +1,8 @@
+{
+  "results": [
+    { "task_id": "task_voltage_mismatch", "score": 0.5 },
+    { "task_id": "task_multi_violation", "score": 0.5 },
+    { "task_id": "task_full_audit", "score": 0.5 },
+    { "task_id": "task_industrial_mcu", "score": 0.5 }
+  ]
+}

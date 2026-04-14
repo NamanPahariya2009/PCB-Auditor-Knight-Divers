@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+pydantic
+pyyaml
+openai
+gradio
+networkx
+matplotlib
+numpy
+requests
+python-dotenv
+openenv
