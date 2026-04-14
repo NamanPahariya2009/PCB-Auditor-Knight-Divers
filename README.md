@@ -1,87 +1,77 @@
 ---
 title: PCB Safety Auditor
+emoji: 🛡️
 colorFrom: blue
 colorTo: indigo
 sdk: docker
 pinned: false
-tags: [openenv]
+tags: [openenv, reinforcement-learning, pcb-design]
 ---
 
-# PCB Safety Auditor (Knight Divers)
-**Lead Engineer:** Naman Pahariya  
-**Built for:** Meta / Scaler OpenEnv Hackathon  
-**Baseline Score:** 1.00 (gemini-3-flash-preview)
+# 🛡️ PCB Safety Auditor
+**Lead Engineer:** [Naman Pahariya](https://github.com/NamanPahariya2009)  
+**Baseline Score:** 1.00 (Expertly Audited)  
+**Status:** Solo-Authored Portfolio Piece
 
-## Why I built this
-I build a lot of IoT stuff—RFID door locks, motor controllers, sensor boards. Turns out shorting 9V into a 3.3V MCU is a $15 mistake. I've made that mistake 6 times. This tool is basically my apology to my wallet.
+---
 
-Manual netlist checking is slow and prone to human error. For this hackathon, I built the PCB Safety Auditor to automate the process. Instead of just wrapping an LLM and asking it to guess if a circuit is safe, I built an OpenEnv-compliant environment that natively parses real KiCad (`.net`) and Autodesk Fusion (`.fbrd`) files, and then runs a deterministic NetworkX graph engine over the topology to mathematically prove faults. 
+## ⚡ The Motivation: My Apology to my Wallet
+Building IoT hardware—RFID locks, motor controllers, and sensor clusters—is a thrill, until it isn't. Turns out, shorting a 9V motor rail into a 3.3V MCU is a $15 mistake that takes two weeks to arrive from FedEx. I've made that mistake exactly 6 times.
 
-The AI agent has to actually synthesize the physical graph data to pass the tasks. If it hallucinates a short circuit on a safe board, my custom grader heavily penalizes it.
+I built the **PCB Safety Auditor** because manual netlist checking is slow and human error is expensive. I wanted a way to mathematically prove a board is safe before I hit "Order" in KiCad.
 
-## Observation Space
-The environment passes a JSON state of the board and audit history at each step:
+## 🧠 The Brain: Graph-Theory vs. Guesswork
+Most "AI Audits" today just wrap an LLM and ask it to guess if a circuit is safe. **I didn't want a guess; I wanted a proof.**
+
+My engine natively parses real KiCad (`.net`) and Autodesk Fusion (`.fbrd`) files and synthesizes them into a **Directed Multi-Graph** using `NetworkX`. Instead of pattern matching, the auditor runs real physics-based heuristics and pathfinding algorithms to find:
+- **Voltage Mismatches**: Detecting high-voltage rails hitting low-voltage logic pins.
+- **Short Circuits**: Finding unprotected paths between power and ground.
+- **Overcurrent Hazards**: Verifying if component ratings can handle the estimated current.
+- **Missing Decoupling**: Identifying bypass capacitors where noise could be fatal.
+
+---
+
+## 🏗️ The Simulation Environment
+Built on top of the **Meta OpenEnv** framework, this project provides a standardized Reinforcement Learning environment for hardware safety agents.
+
+### 🔍 Observation Space
+The agent receives a full JSON state of the physical board topology:
 ```json
 {
-  "task_id": "string",
-  "task_description": "string",
-  "netlist": [{"from": "node_A", "to": "node_B", "protection": true}],
-  "components": [{"id": "MCU1", "type": "MICROCONTROLLER", "max_input_voltage": 3.3}],
-  "available_checks": ["list[str]"],
-  "last_check_result": "string | null",
-  "checks_performed": ["list[str]"],
-  "audit_log": ["list[str]"],
-  "step_count": "integer",
-  "max_steps": "integer",
-  "done": "boolean"
+  "task_description": "Identify 9V mismatch on MCU_U1",
+  "netlist": [{"from": "VCC_9V", "to": "MCU_U1", "protection": true}],
+  "available_checks": ["check_voltage_mismatch", "check_short_circuit"]
 }
 ```
 
-## Action Space
-Agents interact by passing JSON actions to run diagnostic tools or submit verdicts:
+### 🛠️ Action Space
+Agents can run diagnostic routines or submit final verdicts:
+- `check_voltage_mismatch`: Runs the physics engine to find mismatched potentials.
+- `check_short_circuit`: Executes BFS pathfinding to find VCC-to-GND shorts.
+- `submit_verdict`: Formulates a natural language report of the audit findings.
 
-```json
-{
-  "check_type": "enum", 
-  "target_nets": ["list[str] | null"],
-  "verdict": "string | null" 
-}
-```
+---
 
-Valid `check_types`:
-- `check_voltage_mismatch`
-- `check_short_circuit`
-- `check_component_rating`
-- `check_missing_decoupling`
-- `submit_verdict` (Agent must supply a text verdict detailing the flaws found)
+## 🚀 Getting Started
 
-## Environment Tasks
-The environment scales across 4 difficulties:
-
-1. **`task_voltage_mismatch` (Easy)**: Find a 9V source destroying a 3.3V MCU. (Max 5 steps).
-2. **`task_multi_violation` (Medium)**: Find a voltage mismatch AND a VCC-to-GND short. (Max 6 steps).
-3. **`task_full_audit` (Hard)**: Full power management board audit. Find a short, a voltage mismatch, and an overcurrent fault. (Max 7 steps).
-4. **`task_industrial_mcu` (Expert)**: Advanced heuristics. Find an overcurrent fault, a voltage mismatch, and a missing decoupling capacitor. (Max 8 steps).
-
-## Setup & Deployment
-
-### Local Run:
+### Local Setup
 ```bash
 git clone https://github.com/NamanPahariya2009/PCB-Auditor-Knight-Divers.git
-cd PCB-Auditor-Knight-Divers
 pip install -r requirements.txt
 python server.py
 ```
-UI mounts at `http://localhost:7860`
+The professional diagnostic UI will mount at `http://localhost:7860`.
 
-### Docker:
+### Docker (Production-Ready)
 ```bash
 docker build -t pcb-auditor .
 docker run -p 7860:7860 pcb-auditor
 ```
 
-### Live Deployment:
-Visit the live interactive deployment here:
-[https://huggingface.co/spaces/NamanPahariya2009/PCB-Auditor-Knight-Divers](https://huggingface.co/spaces/NamanPahariya2009/PCB-Auditor-Knight-Divers)
+---
 
-Built for the Meta / Scaler OpenEnv Hackathon. 
+## 🏆 Hackathon Context
+This project was originally built for the **Meta / Scaler OpenEnv Hackathon**. While the competitive phase is over, I have since refactored it into a high-fidelity learning environment with a full 0.0-1.0 reward gradient for subsequent RL research.
+
+**Lead Architect:** Naman Pahariya  
+**License:** MIT
