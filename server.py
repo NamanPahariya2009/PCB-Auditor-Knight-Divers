@@ -359,6 +359,42 @@ def run_audit(task_id: str, check_types: list, verdict: str, custom_json: str = 
 
 
 with gr.Blocks(title="PCB Auditor") as demo:
+    gr.Markdown("# PCB Safety Auditor")
+    gr.Markdown("### Developed by Naman Pahariya")
+    
+    with gr.Row():
+        with gr.Column(scale=1):
+            task_dropdown = gr.Dropdown(
+                choices=list(TASKS.keys()), 
+                value="task_voltage_mismatch", 
+                label="Select Simulation Task"
+            )
+            with gr.Accordion("Custom Board Input", open=False):
+                custom_json = gr.Code(label="Manual Netlist (JSON)", language="json")
+                netlist_upload = gr.File(label="Upload KiCad/Fusion File", file_types=[".net", ".fbrd"])
+
+            check_dropdown = gr.CheckboxGroup(
+                choices=["check_voltage_mismatch", "check_short_circuit", "check_component_rating", "check_missing_decoupling"],
+                value=["check_voltage_mismatch"], 
+                label="Diagnostic Routine"
+            )
+            verdict_box = gr.Textbox(
+                label="Manual Verdict Input", 
+                placeholder="Describe the fault (e.g., 9V mismatch on U1)", 
+                lines=2
+            )
+            scan_btn = gr.Button("Run Audit", variant="primary")
+
+        with gr.Column(scale=2):
+            gr.Markdown("### Topology Diagnostic Map")
+            graph_out = gr.Plot(label="Live Graph View")
+            result_out = gr.Markdown("### System Status: Ready")
+
+    scan_btn.click(
+        fn=run_audit,
+        inputs=[task_dropdown, check_dropdown, verdict_box, custom_json, netlist_upload],
+        outputs=[result_out, graph_out],
+    )
 
     gr.Markdown("---")
     gr.Markdown("Built for Meta / Scaler OpenEnv Hackathon")
