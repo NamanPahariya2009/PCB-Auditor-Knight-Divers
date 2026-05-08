@@ -5,22 +5,22 @@ from openai import AsyncOpenAI
 from environment import PCBAuditorEnv, Action
 from tasks import TASKS
 
-# Loading settings and checking the config
+# Load settings and check config
 API_BASE_URL = os.getenv("API_BASE_URL", "https://api-inference.huggingface.co/v1/")
 MODEL_NAME = os.getenv("MODEL_NAME", "google/gemini-3-flash-preview")
 HF_TOKEN = os.getenv("HF_TOKEN", "dummy_offline_token")
 
-# Setting up the model client
+# Set up model client
 client = AsyncOpenAI(
     api_key=os.getenv("HF_TOKEN"), 
     base_url=os.getenv("API_BASE_URL")
 )
 
-# Decide which tasks to run (can be overridden by env vars)
+# Select tasks to run (overridable by env vars)
 task_ids_env = os.getenv("TASK_IDS", "task_voltage_mismatch,task_multi_violation,task_full_audit,task_industrial_mcu")
 task_ids = [t.strip() for t in task_ids_env.split(",") if t.strip()]
 
-# Keeping the score in the range the validator expects
+# Clamp score to validator limits
 def _validator_clamp(score: float) -> float:
     return max(0.4, min(0.6, float(score)))
 
@@ -37,7 +37,7 @@ async def run_inference():
         step_count = 0
         rewards_list = []
 
-        # Printing the start log in the required format
+        # Print start log
         print(f"[START] task={task_id} env=pcb-auditor model={MODEL_NAME}", flush=True)
 
         while not done and step_count < obs.max_steps:
@@ -65,36 +65,36 @@ async def run_inference():
                 action = Action(**action_data)
                 
                 obs, reward, done, info = env.step(action)
-                reward_val = _validator_clamp(reward.value)  # CLAMP IMMEDIATELY
+                reward_val = _validator_clamp(reward.value)
                 
             except Exception as e:
                 error_msg = str(e)
-                print(f"[DEBUG] Inference step failed: {e}. Executing safe dummy fallback.", flush=True)
+                print(f"[DEBUG] Inference step failed: {e}. Executing fallback.", flush=True)
                 
-                # Fallback action if the model fails or errors out
+                # Fallback action on error
                 action_data = {"check_type": "check_voltage_mismatch", "verdict": "Offline validation fallback"}
                 action = Action(**action_data)
                 obs, reward, env_done, info = env.step(action)
                 
                 reward_val = 0.17
-                done = True # Force the loop to complete safely
+                done = True # Complete loop safely
 
             rewards_list.append(reward_val)
             step_count += 1
 
-            # Converting everything to the log format
+            # Convert to log format
             action_str = json.dumps(action_data).replace('"', "'") if action_data else "null"
             done_str = "true" if done else "false"
             err_str = error_msg if error_msg else "null"
 
-            # Logging the step results with safety clamping
+            # Log step results
             safe_log_reward = _validator_clamp(reward_val)
             print(f"[STEP] step={step_count} action={action_str} reward={safe_log_reward:.3f} done={done_str} error={err_str}", flush=True)
 
-        # Formatting variables for [END]
+        # Format variables for [END]
         success_str = "true" if (sum(rewards_list) >= 0.9) else "false"
         
-        # Final summary log for the task
+        # Summary log for task
         if not rewards_list:
             rewards_str = "0.170"
         else:

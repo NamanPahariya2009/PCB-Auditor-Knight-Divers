@@ -119,7 +119,7 @@ class PCBAuditorEnv:
         return self._obs
 
     def step(self, action: Action) -> Tuple[Observation, Reward, bool, Dict]:
-        # Cleaning up NoneTypes so the engine doesn't choke on weird inputs from the agent
+        # Clean up NoneTypes
         if getattr(action, "verdict", None) is None:
             action.verdict = ""
         if getattr(action, "target_nets", None) is None:
@@ -127,9 +127,9 @@ class PCBAuditorEnv:
             
         obs, reward, done, info = self._step_internal(action)
         
-        # 3. Kill the Boolean Trap inside the core
+        # Ensure strict boolean
         if isinstance(done, bool):
-            done = bool(done) # Ensure strict boolean if they expect it natively
+            done = bool(done)
             
         return obs, reward, done, info
 
@@ -157,10 +157,9 @@ class PCBAuditorEnv:
         if check == "submit_verdict":
             done = True
             
-                # Finding faults on custom boards uploaded by users
+            # Find faults on custom boards
             if self._state.current_task_id == "custom_task":
-                # Use the deterministic check engine as the ground truth for custom boards,
-                # even if the agent only ran a subset of checks before submitting.
+                # Use deterministic checks as ground truth
                 expected_violations, expected_paths = self._run_all_diagnostics()
                 expected = set(expected_violations)
                 self._merge_found_violations(expected_violations, expected_paths)
@@ -172,7 +171,7 @@ class PCBAuditorEnv:
                     grade_score += 0.30
                     msgs.append(f"✓ Performed {len(self._state.checks_performed)} diagnostic checks.")
                 
-                # Check if the agent's VERDICT string actually mentions what the physics engine found
+                # Check if verdict string mentions found faults
                 verdict_text = (action.verdict or "").lower()
                 identified_count = 0
                 
@@ -186,25 +185,25 @@ class PCBAuditorEnv:
                     accuracy = identified_count / len(expected_types)
                     grade_score += (0.70 * accuracy)
                     if accuracy == 1.0:
-                        msgs.append(f"✓ Agent successfully identified all {len(expected_types)} physical fault type(s).")
+                        msgs.append(f"✓ Identified all {len(expected_types)} fault type(s).")
                     else:
-                        msgs.append(f"✗ Agent missed faults in verdict. Identified {identified_count}/{len(expected_types)} type(s).")
+                        msgs.append(f"✗ Missed faults. Identified {identified_count}/{len(expected_types)} type(s).")
                 else:
-                    # The board is physically safe. Did the agent hallucinate a danger?
+                    # Check for false positive
                     hallucination_keywords = ["short", "voltage", "current", "overcurrent", "mismatch", "violation"]
                     if any(kw in verdict_text for kw in hallucination_keywords):
-                        grade_score += 0.20  # Heavy penalty for false positive
-                        msgs.append("✗ FATAL: Agent hallucinated violations on a perfectly safe board.")
+                        grade_score += 0.20  # Penalty for false positive
+                        msgs.append("✗ False positive: violations reported on safe board.")
                     else:
                         grade_score += 0.70
-                        msgs.append("✓ Custom circuit physics verified. Agent correctly identified board is safe.")
+                        msgs.append("✓ Safe board correctly identified.")
                 
                 grade_score = max(0.0, min(1.0, float(grade_score)))
                 
                 grade_msg = " | ".join(msgs)
                 found = list(expected)
                 
-            # Standard grading for the predefined tasks
+            # Standard grading for predefined tasks
             else:
                 grade_score, grade_msg, found = run_grader(
                     task_id=self._state.current_task_id,
@@ -306,7 +305,7 @@ class PCBAuditorEnv:
                 if components.get(n, {}).get("type") == "GROUND" or n == "GND"
             ]
 
-            # BFS on unprotected-only subgraph
+            # BFS on unprotected subgraph
             unprotected_G = nx.Graph()
             for conn in connections:
                 if not conn.get("protection", True):
@@ -364,7 +363,7 @@ class PCBAuditorEnv:
                     if violation not in found_violations:
                         found_violations.append(violation)
                         found_paths.append([mcu])
-                        result_lines.append(f"⚠ VIOLATION: {mcu} lacks a decoupling capacitor. High risk of power transients and resets.")
+                        result_lines.append(f"⚠ VIOLATION: {mcu} lacks a decoupling capacitor.")
             
             if not result_lines:
                 result_lines.append("✓ All logic chips have proper decoupling capacitors.")

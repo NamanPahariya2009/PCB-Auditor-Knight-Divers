@@ -31,14 +31,14 @@ app = FastAPI(
 
 # Root redirect handled by Gradio mount at "/"
 
-# Adding some safety here to handle validation errors.
-# The OpenEnv spec is strict: /reset can't have a reward, but /step must.
+# Handle validation errors.
+# OpenEnv spec requires /reset to have no reward, and /step to have one.
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    print(f"Intercepted validation error on {request.url.path}: {exc}")
+    print(f"Validation error on {request.url.path}: {exc}")
     
-    # Reset doesn't need a reward, but step does. Keeping it compliant.
+    # Reset doesn't need a reward, but step does.
     if request.url.path == "/reset":
         return JSONResponse(
             status_code=200,
@@ -78,9 +78,9 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    print(f"Caught a 500 crash: {exc}")
+    print(f"Caught exception: {exc}")
     
-    # I have to return a valid JSON even if the engine crashes, so the agent doesn't hang.
+    # Return valid JSON on crash.
     if request.url.path == "/reset":
         return JSONResponse(
             status_code=200,
@@ -236,12 +236,12 @@ def health_endpoint():
     }
 
 
-# Logic to generate the PCB graph visualization
+# PCB graph visualization
 
 def generate_pcb_graph(task_dict: dict, violation_paths: list):
     """
     Build NetworkX topology map.
-    Highlights entire violation PATHS in Safety Orange (#FF6B00).
+    Highlights violation paths in orange.
     """
     components = {c["id"]: c for c in task_dict["components"]}
 
@@ -269,7 +269,7 @@ def generate_pcb_graph(task_dict: dict, violation_paths: list):
     node_colors = []
     for node in G.nodes():
         if node in violation_nodes:
-            node_colors.append("#FF6B00")   # Safety Orange — violation
+            node_colors.append("#FF6B00")   # Orange — violation
         elif "GND" in node:
             node_colors.append("#444466")   # Dark — ground
         elif components.get(node, {}).get("type") == "POWER_SUPPLY" or \
@@ -288,7 +288,7 @@ def generate_pcb_graph(task_dict: dict, violation_paths: list):
     nx.draw_networkx_edges(G, pos, edgelist=normal_edges,
                            edge_color="#555577", arrows=True, arrowsize=18,
                            width=1.5, ax=ax)
-    # Violation edges — thick Safety Orange
+    # Violation edges
     if violation_edge_list:
         nx.draw_networkx_edges(G, pos, edgelist=violation_edge_list,
                                edge_color="#FF6B00", arrows=True, arrowsize=22,
@@ -314,7 +314,7 @@ def generate_pcb_graph(task_dict: dict, violation_paths: list):
 # The web interface using Gradio
 
 def run_audit(task_id: str, check_types: list, verdict: str, custom_json: str = "", netlist_file = None):
-    """Run a full mini-episode and return audit log + graph."""
+    """Run audit and return log + graph."""
     import json
     env = PCBAuditorEnv()
     
@@ -325,12 +325,12 @@ def run_audit(task_id: str, check_types: list, verdict: str, custom_json: str = 
             from netlist_parser import parse_board_file
             custom_task = parse_board_file(netlist_file.name)
         except Exception as e:
-            return f"[FAIL] **PARSE ERROR:** {str(e)}", None
+            return f"Parse Error: {str(e)}", None
     elif custom_json and custom_json.strip():
         try:
             custom_task = json.loads(custom_json)
         except Exception as e:
-            return f"[FAIL] **JSON ERROR:** Failed to parse custom netlist.\n```\n{str(e)}\n```", None
+            return f"JSON Error: Failed to parse custom netlist.\n```\n{str(e)}\n```", None
 
     obs = env.reset(task_id=task_id, custom_task=custom_task)
     done = False
@@ -344,7 +344,7 @@ def run_audit(task_id: str, check_types: list, verdict: str, custom_json: str = 
     if not done:
         obs, reward, done, info = env.step(Action(check_type="submit_verdict", verdict=verdict))
 
-    log_lines = ["## [AUDIT] Audit Log\n"]
+    log_lines = ["## Audit Log\n"]
     for entry in obs.audit_log:
         log_lines.append(f"```\n{entry}\n```")
 
@@ -359,45 +359,9 @@ def run_audit(task_id: str, check_types: list, verdict: str, custom_json: str = 
 
 
 with gr.Blocks(title="PCB Auditor") as demo:
-    gr.Markdown("# 🛡️ PCB Safety Auditor")
-    gr.Markdown("### Developed by Naman Pahariya")
-    
-    with gr.Row():
-        with gr.Column(scale=1):
-            task_dropdown = gr.Dropdown(
-                choices=list(TASKS.keys()), 
-                value="task_voltage_mismatch", 
-                label="Select Simulation Task"
-            )
-            with gr.Accordion("Custom Board Input", open=False):
-                custom_json = gr.Code(label="Manual Netlist (JSON)", language="json")
-                netlist_upload = gr.File(label="Upload KiCad/Fusion File", file_types=[".net", ".fbrd"])
-
-            check_dropdown = gr.CheckboxGroup(
-                choices=["check_voltage_mismatch", "check_short_circuit", "check_component_rating", "check_missing_decoupling"],
-                value=["check_voltage_mismatch"], 
-                label="Diagnostic Routine"
-            )
-            verdict_box = gr.Textbox(
-                label="Manual Verdict Input", 
-                placeholder="Describe the fault (e.g., 9V mismatch on U1)", 
-                lines=2
-            )
-            scan_btn = gr.Button("🚀 RUN AUDIT", variant="primary")
-
-        with gr.Column(scale=2):
-            gr.Markdown("### 🔍 Topology Diagnostic Map")
-            graph_out = gr.Plot(label="Live Graph View")
-            result_out = gr.Markdown("### System Status: Ready")
-
-    scan_btn.click(
-        fn=run_audit,
-        inputs=[task_dropdown, check_dropdown, verdict_box, custom_json, netlist_upload],
-        outputs=[result_out, graph_out],
-    )
 
     gr.Markdown("---")
-    gr.Markdown("🛡️ Built for the **Meta / Scaler OpenEnv Hackathon**")
+    gr.Markdown("Built for Meta / Scaler OpenEnv Hackathon")
 
 
 app = gr.mount_gradio_app(app, demo, path="/", root_path="")
