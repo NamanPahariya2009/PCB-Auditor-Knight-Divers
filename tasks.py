@@ -23,14 +23,16 @@ TASKS: Dict[str, Dict[str, Any]] = {
         "max_steps": 5,
         "violations": ["VOLTAGE_MISMATCH:VCC_9V->MCU_U1(9.0V>3.3V)"],
         "components": [
-            {"id": "VCC_9V",    "type": "POWER_SUPPLY",  "voltage": 9.01,  "max_input_voltage": None, "max_current_ma": None},
+            {"id": "VCC_9V",    "type": "POWER_SUPPLY",  "voltage": 9.0,  "max_input_voltage": None, "max_current_ma": None},
             {"id": "MCU_U1",    "type": "MICROCONTROLLER","voltage": None, "max_input_voltage": 3.3,  "max_current_ma": 50},
-            {"id": "R1",        "type": "RESISTOR",       "voltage": None, "max_input_voltage": 50.01, "max_current_ma": 200},
-            {"id": "LED_D1",    "type": "LED",            "voltage": None, "max_input_voltage": 5.01,  "max_current_ma": 20},
-            {"id": "GND",       "type": "GROUND",         "voltage": 0.01, "max_input_voltage": None, "max_current_ma": None},
+            {"id": "C_MCU",     "type": "CAPACITOR",      "voltage": None, "max_input_voltage": None, "max_current_ma": None},
+            {"id": "R1",        "type": "RESISTOR",       "voltage": None, "max_input_voltage": 50.0, "max_current_ma": 200},
+            {"id": "LED_D1",    "type": "LED",            "voltage": None, "max_input_voltage": 5.0,  "max_current_ma": 20},
+            {"id": "GND",       "type": "GROUND",         "voltage": 0.0, "max_input_voltage": None, "max_current_ma": None},
         ],
         "netlist": [
             {"from": "VCC_9V", "to": "MCU_U1",  "net": "VCC_RAIL",   "current_ma": 45, "protection": True},
+            {"from": "VCC_9V", "to": "C_MCU",   "net": "VCC_RAIL",   "current_ma": 1,  "protection": True},
             {"from": "VCC_9V", "to": "R1",      "net": "VCC_RAIL",   "current_ma": 18, "protection": True},
             {"from": "R1",     "to": "LED_D1",  "net": "LED_NET",    "current_ma": 18, "protection": True},
             {"from": "LED_D1", "to": "GND",     "net": "GND_RAIL",   "current_ma": 18, "protection": True},
@@ -48,15 +50,17 @@ TASKS: Dict[str, Dict[str, Any]] = {
             "SHORT_CIRCUIT:VCC_3V3->GND",
         ],
         "components": [
-            {"id": "VMOT_12V",   "type": "POWER_SUPPLY",  "voltage": 12.01, "max_input_voltage": None, "max_current_ma": None},
+            {"id": "VMOT_12V",   "type": "POWER_SUPPLY",  "voltage": 12.0, "max_input_voltage": None, "max_current_ma": None},
             {"id": "VCC_3V3",    "type": "POWER_SUPPLY",  "voltage": 3.3,  "max_input_voltage": None, "max_current_ma": None},
-            {"id": "LOGIC_IC_U2","type": "LOGIC_IC",      "voltage": None,  "max_input_voltage": 5.01,  "max_current_ma": 100},
-            {"id": "MOSFET_Q1",  "type": "MOSFET",        "voltage": None,  "max_input_voltage": 20.01, "max_current_ma": 3000},
-            {"id": "MOTOR_M1",   "type": "MOTOR",         "voltage": None,  "max_input_voltage": 12.01, "max_current_ma": 2000},
-            {"id": "GND",        "type": "GROUND",        "voltage": 0.01,  "max_input_voltage": None, "max_current_ma": None},
+            {"id": "LOGIC_IC_U2","type": "LOGIC_IC",      "voltage": None,  "max_input_voltage": 5.0,  "max_current_ma": 100},
+            {"id": "C_LOGIC",    "type": "CAPACITOR",     "voltage": None,  "max_input_voltage": None, "max_current_ma": None},
+            {"id": "MOSFET_Q1",  "type": "MOSFET",        "voltage": None,  "max_input_voltage": 20.0, "max_current_ma": 3000},
+            {"id": "MOTOR_M1",   "type": "MOTOR",         "voltage": None,  "max_input_voltage": 12.0, "max_current_ma": 2000},
+            {"id": "GND",        "type": "GROUND",        "voltage": 0.0,  "max_input_voltage": None, "max_current_ma": None},
         ],
         "netlist": [
             {"from": "VMOT_12V",   "to": "LOGIC_IC_U2", "net": "VMOT_RAIL",  "current_ma": 95,   "protection": True},
+            {"from": "VMOT_12V",   "to": "C_LOGIC",     "net": "VMOT_RAIL",  "current_ma": 1,    "protection": True},
             {"from": "VMOT_12V",   "to": "MOSFET_Q1",   "net": "VMOT_RAIL",  "current_ma": 1800, "protection": True},
             {"from": "MOSFET_Q1",  "to": "MOTOR_M1",    "net": "MOTOR_NET",  "current_ma": 1800, "protection": True},
             {"from": "MOTOR_M1",   "to": "GND",         "net": "GND_RAIL",   "current_ma": 1800, "protection": True},
@@ -76,19 +80,21 @@ TASKS: Dict[str, Dict[str, Any]] = {
             "OVERCURRENT:REGULATOR_U1->MCU_U2(750mA>500mA)",
         ],
         "components": [
-            {"id": "VINPUT_24V",   "type": "POWER_SUPPLY",  "voltage": 24.01, "max_input_voltage": None, "max_current_ma": None},
-            {"id": "V5V_RAIL",     "type": "POWER_SUPPLY",  "voltage": 5.01,  "max_input_voltage": None, "max_current_ma": None},
-            {"id": "REGULATOR_U1", "type": "VOLTAGE_REG",   "voltage": 3.3,  "max_input_voltage": 30.01, "max_current_ma": 1000},
+            {"id": "VINPUT_24V",   "type": "POWER_SUPPLY",  "voltage": 24.0, "max_input_voltage": None, "max_current_ma": None},
+            {"id": "V5V_RAIL",     "type": "POWER_SUPPLY",  "voltage": 5.0,  "max_input_voltage": None, "max_current_ma": None},
+            {"id": "REGULATOR_U1", "type": "VOLTAGE_REG",   "voltage": 3.3,  "max_input_voltage": 30.0, "max_current_ma": 1000},
             {"id": "MCU_U2",       "type": "MICROCONTROLLER","voltage": None, "max_input_voltage": 3.6,  "max_current_ma": 500},
-            {"id": "SENSOR_IC_U3", "type": "SENSOR_IC",     "voltage": None, "max_input_voltage": 5.01,  "max_current_ma": 30},
+            {"id": "C_MCU_U2",     "type": "CAPACITOR",      "voltage": None, "max_input_voltage": None, "max_current_ma": None},
+            {"id": "SENSOR_IC_U3", "type": "SENSOR_IC",     "voltage": None, "max_input_voltage": 5.0,  "max_current_ma": 30},
             {"id": "OLED_U4",      "type": "DISPLAY",       "voltage": None, "max_input_voltage": 3.6,  "max_current_ma": 100},
             {"id": "SD_CARD_U5",   "type": "STORAGE",       "voltage": None, "max_input_voltage": 3.6,  "max_current_ma": 150},
-            {"id": "GND",          "type": "GROUND",        "voltage": 0.01, "max_input_voltage": None, "max_current_ma": None},
+            {"id": "GND",          "type": "GROUND",        "voltage": 0.0, "max_input_voltage": None, "max_current_ma": None},
         ],
         "netlist": [
             {"from": "VINPUT_24V",   "to": "SENSOR_IC_U3",  "net": "24V_RAIL",   "current_ma": 28,  "protection": True},
             {"from": "VINPUT_24V",   "to": "REGULATOR_U1",  "net": "24V_RAIL",   "current_ma": 780, "protection": True},
             {"from": "REGULATOR_U1", "to": "MCU_U2",        "net": "3V3_RAIL",   "current_ma": 750, "protection": True},
+            {"from": "REGULATOR_U1", "to": "C_MCU_U2",      "net": "3V3_RAIL",   "current_ma": 1,   "protection": True},
             {"from": "REGULATOR_U1", "to": "OLED_U4",       "net": "3V3_RAIL",   "current_ma": 95,  "protection": True},
             {"from": "REGULATOR_U1", "to": "SD_CARD_U5",    "net": "3V3_RAIL",   "current_ma": 140, "protection": True},
             {"from": "V5V_RAIL",     "to": "GND",           "net": "SHORT_NET",  "current_ma": 0.01, "protection": False},
@@ -110,11 +116,11 @@ TASKS: Dict[str, Dict[str, Any]] = {
             "OVERCURRENT:REGULATOR_U1->MCU_U2(750mA>500mA)",
         ],
         "components": [
-            {"id": "VINPUT_24V",   "type": "POWER_SUPPLY",  "voltage": 24.01, "max_input_voltage": None, "max_current_ma": None},
-            {"id": "REGULATOR_U1", "type": "VOLTAGE_REG",   "voltage": 3.3,  "max_input_voltage": 30.01, "max_current_ma": 1000},
+            {"id": "VINPUT_24V",   "type": "POWER_SUPPLY",  "voltage": 24.0, "max_input_voltage": None, "max_current_ma": None},
+            {"id": "REGULATOR_U1", "type": "VOLTAGE_REG",   "voltage": 3.3,  "max_input_voltage": 30.0, "max_current_ma": 1000},
             {"id": "MCU_U2",       "type": "MICROCONTROLLER","voltage": None, "max_input_voltage": 3.6,  "max_current_ma": 500},
-            {"id": "SENSOR_IC_U3", "type": "SENSOR_IC",     "voltage": None, "max_input_voltage": 5.01,  "max_current_ma": 30},
-            {"id": "GND",          "type": "GROUND",        "voltage": 0.01, "max_input_voltage": None, "max_current_ma": None},
+            {"id": "SENSOR_IC_U3", "type": "SENSOR_IC",     "voltage": None, "max_input_voltage": 5.0,  "max_current_ma": 30},
+            {"id": "GND",          "type": "GROUND",        "voltage": 0.0, "max_input_voltage": None, "max_current_ma": None},
         ],
         "netlist": [
             {"from": "VINPUT_24V",   "to": "SENSOR_IC_U3",  "net": "24V_RAIL",   "current_ma": 28,  "protection": True},
@@ -137,7 +143,7 @@ def run_grader(
 ) -> Tuple[float, str, List[str]]:
     """
     Deterministic grader for each task.
-    Returns (score: float 0.17-0.83, message: str, found_violations: list)
+    Scores the actual diagnostics first, then uses the verdict as confirmation.
     """
     if task_id not in TASKS:
         return _safe_score(0.0), f"Unknown task_id: {task_id}", []
@@ -145,178 +151,81 @@ def run_grader(
     task = TASKS[task_id]
     expected = set(task["violations"])
     found = set(violations_found)
-    
-    # Sanitize inputs
-    verdict_lower = str(verdict).lower() if verdict else ""
     checks_performed = checks_performed if checks_performed else []
+    verdict_lower = str(verdict).lower() if verdict else ""
 
-    # --- Grading Logic ---
+    expected_types = {_violation_type(v) for v in expected}
+    found_expected = expected & found
+    found_types = {_violation_type(v) for v in found}
+    unexpected_types = found_types - expected_types
 
-    # Anti-Cheat: If the agent claims a short circuit but none exists in expected, penalize.
-    if "short" in verdict_lower and not any("SHORT" in v for v in expected):
-        return _safe_score(0.0), "✗ FATAL: Agent hallucinated a short circuit that does not exist.", list(found)
-    
-    if "overcurrent" in verdict_lower and not any("OVERCURRENT" in v for v in expected):
-        return _safe_score(0.0), "✗ FATAL: Agent hallucinated an overcurrent issue.", list(found)
+    required_checks = {_required_check_for_type(vtype) for vtype in expected_types}
+    required_checks.discard(None)
+    checks_done = required_checks & set(checks_performed)
 
-    if task_id == "task_voltage_mismatch":
-        score, msg, f = _grade_easy(expected, found, verdict_lower, checks_performed)
-    elif task_id == "task_multi_violation":
-        score, msg, f = _grade_medium(expected, found, verdict_lower, checks_performed)
-    elif task_id == "task_full_audit":
-        score, msg, f = _grade_hard(expected, found, verdict_lower, checks_performed)
-    elif task_id == "task_industrial_mcu":
-        score, msg, f = _grade_industrial(expected, found, verdict_lower, checks_performed)
-    # Centering the scores according to the spec
-    final_clamped_score = _safe_score(score)
-    
-    return final_clamped_score, msg, f
+    check_score = len(checks_done) / len(required_checks) if required_checks else 1.0
+    exact_found_score = len(found_expected) / len(expected) if expected else 1.0
+    type_found_score = len(found_types & expected_types) / len(expected_types) if expected_types else 1.0
+    found_score = max(exact_found_score, 0.8 * type_found_score)
 
+    verdict_hits = {
+        vtype for vtype in expected_types
+        if _verdict_mentions_type(verdict_lower, vtype)
+    }
+    verdict_score = len(verdict_hits) / len(expected_types) if expected_types else _safe_verdict_score(verdict_lower)
 
-def _grade_easy(
-    expected: set, found: set, verdict: str, checks: List[str]
-) -> Tuple[float, str, List[str]]:
-    """
-    Easy grader: Did the agent find the voltage mismatch?
-    """
-    score = 0.0
-    msgs = []
+    score = (0.35 * check_score) + (0.45 * found_score) + (0.20 * verdict_score)
 
-    if "check_voltage_mismatch" in checks:
-        score += 0.5
-        msgs.append("✓ Voltage check performed.")
-    else:
-        msgs.append("✗ Voltage check was not performed.")
+    false_positive_types = {
+        vtype for vtype in _known_violation_types()
+        if vtype not in expected_types and _verdict_mentions_type(verdict_lower, vtype)
+    }
+    score -= 0.15 * len(unexpected_types)
+    score -= 0.20 * len(false_positive_types)
 
-    voltage_keywords = ["9v", "9.0v", "3.3v", "voltage mismatch", "voltage violation", "overvoltage", "mcu"]
-    if any(kw in verdict for kw in voltage_keywords):
-        score += 0.5
-        msgs.append("✓ Verdict correctly identifies voltage mismatch.")
-    else:
-        msgs.append("✗ Verdict does not mention the voltage violation.")
+    msgs = [
+        f"Checks performed: {len(checks_done)}/{len(required_checks)} required.",
+        f"Expected violations found: {len(found_expected)}/{len(expected)}.",
+        f"Verdict coverage: {len(verdict_hits)}/{len(expected_types)} violation type(s).",
+    ]
+    if unexpected_types:
+        msgs.append(f"Unexpected diagnostic type(s): {', '.join(sorted(unexpected_types))}.")
+    if false_positive_types:
+        msgs.append(f"Verdict false positive type(s): {', '.join(sorted(false_positive_types))}.")
 
     return _safe_score(score), " | ".join(msgs), list(found)
 
 
-def _grade_medium(
-    expected: set, found: set, verdict: str, checks: List[str]
-) -> Tuple[float, str, List[str]]:
-    """
-    Medium grader: Did the agent find BOTH violations?
-    """
-    score = 0.0
-    msgs = []
-
-    # Check 1: Voltage mismatch
-    voltage_ok = "check_voltage_mismatch" in checks
-    voltage_in_verdict = any(kw in verdict for kw in ["12v", "12.0v", "5v", "voltage", "overvoltage"])
-
-    # Check 2: Short circuit
-    short_ok = "check_short_circuit" in checks
-    short_in_verdict = any(kw in verdict for kw in ["short", "short circuit", "3.3v", "3v3", "gnd"])
-
-    if voltage_ok:
-        score += 0.2
-        msgs.append("✓ Voltage check performed.")
-    else:
-        msgs.append("✗ Voltage check skipped.")
-
-    if short_ok:
-        score += 0.2
-        msgs.append("✓ Short circuit check performed.")
-    else:
-        msgs.append("✗ Short circuit check skipped.")
-
-    if voltage_in_verdict:
-        score += 0.3
-        msgs.append("✓ Verdict identifies voltage violation.")
-    else:
-        msgs.append("✗ Verdict misses voltage violation.")
-
-    if short_in_verdict:
-        score += 0.3
-        msgs.append("✓ Verdict identifies short circuit.")
-    else:
-        msgs.append("✗ Verdict misses short circuit.")
-
-    return _safe_score(score), " | ".join(msgs), list(found)
+def _violation_type(violation: str) -> str:
+    return str(violation).split(":", 1)[0].upper()
 
 
-def _grade_hard(
-    expected: set, found: set, verdict: str, checks: List[str]
-) -> Tuple[float, str, List[str]]:
-    """
-    Hard grader: All 3 violation types must be found.
-    """
-    score = 0.0
-    msgs = []
-
-    all_checks = ["check_voltage_mismatch", "check_short_circuit", "check_component_rating"]
-    checks_done = sum(1 for c in all_checks if c in checks)
-    score += 0.1 * checks_done  # Up to 0.3 for all 3 checks
-    msgs.append(f"Checks performed: {checks_done}/3.")
-
-    # Voltage mismatch (24V -> 5V sensor)
-    voltage_hit = any(kw in verdict for kw in ["24v", "24.0v", "sensor", "voltage mismatch", "overvoltage"])
-    if voltage_hit:
-        score += 0.233  
-        msgs.append("✓ Voltage mismatch found.")
-    else:
-        msgs.append("✗ Voltage mismatch missed.")
-
-    # Short circuit (5V rail to GND)
-    short_hit = any(kw in verdict for kw in ["short", "5v", "5.0v", "v5v", "gnd direct"])
-    if short_hit:
-        score += 0.233
-        msgs.append("✓ Short circuit found.")
-    else:
-        msgs.append("✗ Short circuit missed.")
-
-    # Overcurrent (regulator to MCU)
-    current_hit = any(kw in verdict for kw in ["overcurrent", "750", "500", "mcu", "current rating", "component rating"])
-    if current_hit:
-        score += 0.234
-        msgs.append("✓ Overcurrent violation found.")
-    else:
-        msgs.append("✗ Overcurrent violation missed.")
-
-    return _safe_score(score), " | ".join(msgs), list(found)
+def _known_violation_types() -> set:
+    return {"VOLTAGE_MISMATCH", "SHORT_CIRCUIT", "OVERCURRENT", "MISSING_DECOUPLING"}
 
 
-def _grade_industrial(
-    expected: set, found: set, verdict: str, checks: List[str]
-) -> Tuple[float, str, List[str]]:
-    """
-    Expert grader: Decoupling + Voltage + Current.
-    """
-    score = 0.0
-    msgs = []
+def _required_check_for_type(violation_type: str) -> Optional[str]:
+    return {
+        "VOLTAGE_MISMATCH": "check_voltage_mismatch",
+        "SHORT_CIRCUIT": "check_short_circuit",
+        "OVERCURRENT": "check_component_rating",
+        "MISSING_DECOUPLING": "check_missing_decoupling",
+    }.get(violation_type)
 
-    # 1. Voltage mismatch
-    v_hit = any(kw in verdict for kw in ["24v", "sensor", "voltage mismatch"])
-    if v_hit:
-        score += 0.33
-        msgs.append("✓ Voltage mismatch found.")
-    else:
-        msgs.append("✗ Voltage mismatch missed.")
 
-    # 2. Overcurrent
-    c_hit = any(kw in verdict for kw in ["overcurrent", "750", "current rating"])
-    if c_hit:
-        score += 0.33
-        msgs.append("✓ Overcurrent found.")
-    else:
-        msgs.append("✗ Overcurrent missed.")
+def _verdict_mentions_type(verdict: str, violation_type: str) -> bool:
+    keywords = {
+        "VOLTAGE_MISMATCH": ("voltage", "overvoltage", "mismatch", "9v", "12v", "24v"),
+        "SHORT_CIRCUIT": ("short", "short circuit", "direct"),
+        "OVERCURRENT": ("overcurrent", "current", "rating", "750", "500"),
+        "MISSING_DECOUPLING": ("decoupling", "capacitor", "missing cap"),
+    }
+    return any(keyword in verdict for keyword in keywords.get(violation_type, (violation_type.lower(),)))
 
-    # 3. Decoupling
-    d_hit = "check_missing_decoupling" in checks and any(kw in verdict for kw in ["decoupling", "capacitor", "missing cap"])
-    if d_hit:
-        score += 0.34
-        msgs.append("✓ Decoupling violation found.")
-    else:
-        msgs.append("✗ Decoupling violation missed.")
 
-    return _safe_score(score), " | ".join(msgs), list(found)
+def _safe_verdict_score(verdict: str) -> float:
+    hallucination_terms = ("short", "voltage", "overcurrent", "mismatch", "violation", "decoupling")
+    return 0.0 if any(term in verdict for term in hallucination_terms) else 1.0
 
 
 class OpenEnvGrader:

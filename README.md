@@ -8,70 +8,142 @@ pinned: false
 tags: [openenv, reinforcement-learning, pcb-design]
 ---
 
-# 🛡️ PCB Safety Auditor
-**Lead Engineer:** [Naman Pahariya](https://github.com/NamanPahariya2009)  
-**Baseline Score:** 1.00 (Expertly Audited)  
-**Status:** Solo-Authored Portfolio Piece
+# PCB Safety Auditor
 
----
+PCB Safety Auditor is a deterministic Python environment for checking simplified PCB netlists for common electrical safety problems. It exposes the checker as an OpenEnv-style task environment, a FastAPI API, and a Gradio diagnostic UI.
 
-## ⚡ The Motivation: My Apology to my Wallet
-Building IoT hardware—RFID locks, motor controllers, and sensor clusters—is a thrill, until it isn't. Turns out, shorting a 9V motor rail into a 3.3V MCU is a $15 mistake that takes two weeks to arrive from FedEx. I've made that mistake exactly 6 times.
+The code is intentionally rule-based: it parses board/netlist files into structured components and nets, builds a NetworkX topology, and runs repeatable checks instead of asking an LLM to guess.
 
-I built the **PCB Safety Auditor** because manual netlist checking is slow and human error is expensive. I wanted a way to mathematically prove a board is safe before I hit "Order" in KiCad.
+## What It Checks
 
-## 🧠 The Brain: Graph-Theory vs. Guesswork
-Most "AI Audits" today just wrap an LLM and ask it to guess if a circuit is safe. **I didn't want a guess; I wanted a proof.**
+- Voltage mismatches, such as a high-voltage supply feeding a low-voltage IC input.
+- Short circuits, by searching unprotected power-to-ground paths.
+- Overcurrent hazards, by comparing connection current against component ratings.
+- Missing decoupling, by checking whether logic devices share a non-ground net with a capacitor.
 
-My engine natively parses real KiCad (`.net`) and Autodesk Fusion (`.fbrd`) files and synthesizes them into a **Directed Multi-Graph** using `NetworkX`. Instead of pattern matching, the auditor runs real physics-based heuristics and pathfinding algorithms to find:
-- **Voltage Mismatches**: Detecting high-voltage rails hitting low-voltage logic pins.
-- **Short Circuits**: Finding unprotected paths between power and ground.
-- **Overcurrent Hazards**: Verifying if component ratings can handle the estimated current.
-- **Missing Decoupling**: Identifying bypass capacitors where noise could be fatal.
+## Project Structure
 
----
+- `environment.py`: OpenEnv-style `PCBAuditorEnv`, observations, actions, rewards, and diagnostic checks.
+- `netlist_parser.py`: KiCad/Fusion parser with S-expression handling, XML support, component inference, and net connection normalization.
+- `tasks.py`: Built-in benchmark tasks and diagnostic-first grading.
+- `server.py`: FastAPI endpoints plus the mounted Gradio UI.
+- `inference.py`: OpenAI-compatible model loop for automated agent runs.
+- `boards/`: Sample KiCad/Fusion board inputs.
+- `tests/test_core.py`: Regression tests for parser behavior, task/check alignment, grading, and config.
 
-## 🏗️ The Simulation Environment
-Built on top of the **Meta OpenEnv** framework, this project provides a standardized Reinforcement Learning environment for hardware safety agents.
+## Supported Inputs
 
-### 🔍 Observation Space
-The agent receives a full JSON state of the physical board topology:
+The parser accepts:
+
+- KiCad exported netlists: `.net`
+- KiCad board layouts: `.kicad_pcb`
+- Autodesk Fusion/EAGLE-style XML board files: `.fbrd`
+- Schematic XML files: `.sch`
+
+Parsed custom boards are converted into the same task shape as built-in benchmark tasks:
+
 ```json
 {
-  "task_description": "Identify 9V mismatch on MCU_U1",
-  "netlist": [{"from": "VCC_9V", "to": "MCU_U1", "protection": true}],
-  "available_checks": ["check_voltage_mismatch", "check_short_circuit"]
+  "description": "Audit PCB netlist parsed from boards/example.net.",
+  "components": [
+    {
+      "id": "U1",
+      "type": "MICROCONTROLLER",
+      "voltage": null,
+      "max_input_voltage": 3.6,
+      "max_current_ma": 500
+    }
+  ],
+  "netlist": [
+    {
+      "from": "PWR1",
+      "to": "U1",
+      "net": "24V_RAIL",
+      "current_ma": 500,
+      "protection": true
+    }
+  ],
+  "violations": []
 }
 ```
 
-### 🛠️ Action Space
-Agents can run diagnostic routines or submit final verdicts:
-- `check_voltage_mismatch`: Runs the physics engine to find mismatched potentials.
-- `check_short_circuit`: Executes BFS pathfinding to find VCC-to-GND shorts.
-- `submit_verdict`: Formulates a natural language report of the audit findings.
+## API
 
----
+Run the server:
 
-## 🚀 Getting Started
+```bash
+python server.py
+```
 
-### Local Setup
+The UI mounts at:
+
+```text
+http://localhost:7860
+```
+
+Available API endpoints:
+
+- `POST /reset`
+- `POST /step`
+- `GET /state`
+- `GET /tasks`
+- `GET /health`
+
+`/reset`, `/step`, and `/state` accept an optional `session_id` so concurrent callers do not share the same environment state.
+
+Example:
+
+```bash
+curl -X POST http://localhost:7860/reset \
+  -H "Content-Type: application/json" \
+  -d "{\"task_id\":\"task_full_audit\",\"session_id\":\"demo\"}"
+
+curl -X POST http://localhost:7860/step \
+  -H "Content-Type: application/json" \
+  -d "{\"check_type\":\"check_voltage_mismatch\",\"session_id\":\"demo\"}"
+```
+
+## Local Setup
+
 ```bash
 git clone https://github.com/NamanPahariya2009/PCB-Auditor-Knight-Divers.git
+cd PCB-Auditor-Knight-Divers
 pip install -r requirements.txt
 python server.py
 ```
-The professional diagnostic UI will mount at `http://localhost:7860`.
 
-### Docker (Production-Ready)
+You can also use the installed console entry point after packaging:
+
+```bash
+server
+```
+
+## Docker
+
 ```bash
 docker build -t pcb-auditor .
 docker run -p 7860:7860 pcb-auditor
 ```
 
----
+## Tests
 
-## 🏆 Hackathon Context
-This project was originally built for the **Meta / Scaler OpenEnv Hackathon**. While the competitive phase is over, I have since refactored it into a high-fidelity learning environment with a full 0.0-1.0 reward gradient for subsequent RL research.
+Run the regression suite:
 
-**Lead Architect:** Naman Pahariya  
+```bash
+python -B -m unittest discover -s tests -v
+```
+
+The tests verify that:
+
+- Built-in task declarations match actual diagnostic output.
+- Parsed sample boards do not invent current faults.
+- Known unsafe sample boards still detect voltage violations.
+- Component inference correctly identifies common parts such as MCUs, sensors, relays, motors, and ground.
+- `pyproject.toml` points to the working `server:main` entry point.
+
+## Current Status
+
+The project now favors correctness and reproducibility over presentation copy. The checker is still a heuristic safety auditor, not a replacement for professional PCB review or SPICE simulation, but its parser, diagnostics, grading, API config, and tests are aligned with the current implementation.
+
+**Lead Engineer:** [Naman Pahariya](https://github.com/NamanPahariya2009)<br>
 **License:** MIT

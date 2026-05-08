@@ -4,10 +4,11 @@ Built by Naman Pahariya.
 """
 
 from __future__ import annotations
+from collections import defaultdict
 import random
 import copy
 import networkx as nx
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 from pydantic import BaseModel, Field
 
 from tasks import TASKS, run_grader
@@ -158,8 +159,11 @@ class PCBAuditorEnv:
             
                 # Finding faults on custom boards uploaded by users
             if self._state.current_task_id == "custom_task":
-                # using the physics engine findings as the ground truth for custom boards
-                expected = set(self._state.violations_found) 
+                # Use the deterministic check engine as the ground truth for custom boards,
+                # even if the agent only ran a subset of checks before submitting.
+                expected_violations, expected_paths = self._run_all_diagnostics()
+                expected = set(expected_violations)
+                self._merge_found_violations(expected_violations, expected_paths)
                 
                 grade_score = 0.0
                 msgs = []
@@ -172,20 +176,19 @@ class PCBAuditorEnv:
                 verdict_text = (action.verdict or "").lower()
                 identified_count = 0
                 
-                for v in expected:
+                expected_types = {_violation_type(v) for v in expected}
+                for violation_type in expected_types:
                     # Simplify the violation string to keywords (e.g., "SHORT_CIRCUIT:VCC->GND" -> "short")
-                    if "short" in v.lower() and "short" in verdict_text: identified_count += 1
-                    elif "voltage" in v.lower() and "voltage" in verdict_text: identified_count += 1
-                    elif "current" in v.lower() and "current" in verdict_text: identified_count += 1
-                    elif "decoupling" in v.lower() and "decoupling" in verdict_text: identified_count += 1
+                    if _verdict_mentions_type(verdict_text, violation_type):
+                        identified_count += 1
 
-                if len(expected) > 0:
-                    accuracy = identified_count / len(expected)
+                if len(expected_types) > 0:
+                    accuracy = identified_count / len(expected_types)
                     grade_score += (0.70 * accuracy)
                     if accuracy == 1.0:
-                        msgs.append(f"✓ Agent successfully identified all {len(expected)} physical faults.")
+                        msgs.append(f"✓ Agent successfully identified all {len(expected_types)} physical fault type(s).")
                     else:
-                        msgs.append(f"✗ Agent missed faults in verdict. Identified {identified_count}/{len(expected)}.")
+                        msgs.append(f"✗ Agent missed faults in verdict. Identified {identified_count}/{len(expected_types)} type(s).")
                 else:
                     # The board is physically safe. Did the agent hallucinate a danger?
                     hallucination_keywords = ["short", "voltage", "current", "overcurrent", "mismatch", "violation"]
@@ -256,31 +259,39 @@ class PCBAuditorEnv:
             raise RuntimeError("Call reset() before state().")
         return self._state
 
-    def _build_graph(self) -> Tuple[nx.DiGraph, Dict]:
-        G = nx.DiGraph()
+    def _build_graph(self) -> Tuple[nx.MultiGraph, Dict]:
+        G = nx.MultiGraph()
         components = {c["id"]: c for c in self._current_task["components"]}
         for conn in self._current_task["netlist"]:
             G.add_edge(conn["from"], conn["to"],
                        protection=conn.get("protection", True),
                        current_ma=float(conn.get("current_ma", 0.15)),
-                       net=conn.get("net", ""))
+                       net=conn.get("net", ""),
+                       source=conn["from"],
+                       target=conn["to"])
         return G, components
 
     def _run_check(self, check_type: str, target_nets: Optional[List[str]]) -> Tuple[str, List[str], List[List[str]]]:
         G, components = self._build_graph()
+        connections = self._filtered_connections(target_nets)
         found_violations = []
         found_paths: List[List[str]] = []
         result_lines = []
 
         if check_type == "check_voltage_mismatch":
-            for src, dst, data in G.edges(data=True):
-                src_v = float(components.get(src, {}).get("voltage") or 0.15)
-                dst_v = float(components.get(dst, {}).get("max_input_voltage") or 999.0)
-                if src_v and dst_v and src_v > dst_v:
-                    violation = f"VOLTAGE_MISMATCH:{src}->{dst}({src_v}V>{dst_v}V)"
-                    found_violations.append(violation)
-                    found_paths.append([src, dst])
-                    result_lines.append(f"⚠ VIOLATION: {src} outputs {src_v}V → {dst} max input {dst_v}V")
+            for conn in connections:
+                for src, dst in ((conn["from"], conn["to"]), (conn["to"], conn["from"])):
+                    src_v = _optional_float(components.get(src, {}).get("voltage"))
+                    dst_v = _optional_float(components.get(dst, {}).get("max_input_voltage"))
+                    if src_v is None or dst_v is None or src_v <= dst_v:
+                        continue
+                    violation = _format_voltage_mismatch(src, dst, src_v, dst_v)
+                    if violation not in found_violations:
+                        found_violations.append(violation)
+                        found_paths.append([src, dst])
+                        result_lines.append(
+                            f"⚠ VIOLATION: {src} outputs {_fmt_number(src_v)}V → {dst} max input {_fmt_number(dst_v)}V"
+                        )
             if not result_lines:
                 result_lines.append("✓ No voltage mismatches detected.")
 
@@ -296,10 +307,10 @@ class PCBAuditorEnv:
             ]
 
             # BFS on unprotected-only subgraph
-            unprotected_G = nx.DiGraph()
-            for src, dst, data in G.edges(data=True):
-                if not data.get("protection", True):
-                    unprotected_G.add_edge(src, dst)
+            unprotected_G = nx.Graph()
+            for conn in connections:
+                if not conn.get("protection", True):
+                    unprotected_G.add_edge(conn["from"], conn["to"])
 
             for pwr in power_nodes:
                 for gnd in ground_nodes:
@@ -319,27 +330,34 @@ class PCBAuditorEnv:
                 result_lines.append("✓ No short circuit paths detected.")
 
         elif check_type == "check_component_rating":
-            for src, dst, data in G.edges(data=True):
-                current_ma = float(data.get("current_ma", 0.15))
-                dst_max_ma = float(components.get(dst, {}).get("max_current_ma") or 9999.0)
-                if dst_max_ma and current_ma > dst_max_ma:
-                    violation = f"OVERCURRENT:{src}->{dst}({current_ma}mA>{dst_max_ma}mA)"
+            for conn in connections:
+                src = conn["from"]
+                dst = conn["to"]
+                current_ma = _optional_float(conn.get("current_ma"))
+                dst_max_ma = _optional_float(components.get(dst, {}).get("max_current_ma"))
+                if current_ma is None or dst_max_ma is None or current_ma <= dst_max_ma:
+                    continue
+                violation = _format_overcurrent(src, dst, current_ma, dst_max_ma)
+                if violation not in found_violations:
                     found_violations.append(violation)
                     found_paths.append([src, dst])
                     result_lines.append(
-                        f"⚠ VIOLATION: {src}→{dst} carries {current_ma}mA, rated {dst_max_ma}mA max"
+                        f"⚠ VIOLATION: {src}→{dst} carries {_fmt_current(current_ma)}mA, rated {_fmt_current(dst_max_ma)}mA max"
                     )
             if not result_lines:
                 result_lines.append("✓ All components within rated current limits.")
 
         elif check_type == "check_missing_decoupling":
-            mcus = [n for n in G.nodes() if components.get(n, {}).get("type") in ["MICROCONTROLLER", "LOGIC_IC"]]
+            net_members = self._net_members(connections)
+            mcus = [cid for cid, comp in components.items() if comp.get("type") in ["MICROCONTROLLER", "LOGIC_IC"]]
             for mcu in mcus:
-                # Scan graph for any capacitor connected directly to the MCU
-                has_cap = False
-                for neighbor in G.neighbors(mcu):
-                    if components.get(neighbor, {}).get("type") == "CAPACITOR":
-                        has_cap = True
+                # A decoupling capacitor shares at least one non-ground net with the IC.
+                has_cap = any(
+                    mcu in members
+                    and not _is_ground_net(net)
+                    and any(components.get(node, {}).get("type") == "CAPACITOR" for node in members)
+                    for net, members in net_members.items()
+                )
                 
                 if not has_cap:
                     violation = f"MISSING_DECOUPLING:{mcu}"
@@ -352,6 +370,40 @@ class PCBAuditorEnv:
                 result_lines.append("✓ All logic chips have proper decoupling capacitors.")
 
         return "\n".join(result_lines), found_violations, found_paths
+
+    def _filtered_connections(self, target_nets: Optional[List[str]]) -> List[Dict[str, Any]]:
+        connections = list(self._current_task["netlist"])
+        if not target_nets:
+            return connections
+        wanted = {str(net).lower() for net in target_nets}
+        return [conn for conn in connections if str(conn.get("net", "")).lower() in wanted]
+
+    def _net_members(self, connections: Iterable[Dict[str, Any]]) -> Dict[str, set]:
+        members: Dict[str, set] = defaultdict(set)
+        for conn in connections:
+            net = str(conn.get("net", "UNKNOWN_NET"))
+            members[net].add(conn["from"])
+            members[net].add(conn["to"])
+        return members
+
+    def _run_all_diagnostics(self) -> Tuple[List[str], List[List[str]]]:
+        all_violations: List[str] = []
+        all_paths: List[List[str]] = []
+        for check in self.AVAILABLE_CHECKS:
+            if check == "submit_verdict":
+                continue
+            _, violations, paths = self._run_check(check, None)
+            for violation, path in zip(violations, paths):
+                if violation not in all_violations:
+                    all_violations.append(violation)
+                    all_paths.append(path)
+        return all_violations, all_paths
+
+    def _merge_found_violations(self, violations: List[str], paths: List[List[str]]) -> None:
+        for violation, path in zip(violations, paths):
+            if violation not in self._state.violations_found:
+                self._state.violations_found.append(violation)
+                self._state.violation_paths.append(path)
 
     def _build_obs(self, check_result: Optional[str], done: bool = False) -> Observation:
         return Observation(
@@ -368,3 +420,54 @@ class PCBAuditorEnv:
             max_steps=self._obs.max_steps,
             done=done,
         )
+
+
+def _optional_float(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _fmt_number(value: float) -> str:
+    number = float(value)
+    if abs(number - round(number)) < 1e-9:
+        return f"{number:.1f}"
+    text = f"{number:.3f}".rstrip("0").rstrip(".")
+    return text if "." in text else f"{text}.0"
+
+
+def _format_voltage_mismatch(src: str, dst: str, src_v: float, dst_v: float) -> str:
+    return f"VOLTAGE_MISMATCH:{src}->{dst}({_fmt_number(src_v)}V>{_fmt_number(dst_v)}V)"
+
+
+def _format_overcurrent(src: str, dst: str, current_ma: float, dst_max_ma: float) -> str:
+    return f"OVERCURRENT:{src}->{dst}({_fmt_current(current_ma)}mA>{_fmt_current(dst_max_ma)}mA)"
+
+
+def _fmt_current(value: float) -> str:
+    number = float(value)
+    if abs(number - round(number)) < 1e-9:
+        return str(int(round(number)))
+    return _fmt_number(number)
+
+
+def _is_ground_net(net: str) -> bool:
+    upper = net.upper()
+    return "GND" in upper or "GROUND" in upper or upper in {"VSS", "0V"}
+
+
+def _violation_type(violation: str) -> str:
+    return violation.split(":", 1)[0].upper()
+
+
+def _verdict_mentions_type(verdict_text: str, violation_type: str) -> bool:
+    keywords = {
+        "SHORT_CIRCUIT": ("short", "short circuit", "direct"),
+        "VOLTAGE_MISMATCH": ("voltage", "overvoltage", "mismatch"),
+        "OVERCURRENT": ("current", "overcurrent", "rating"),
+        "MISSING_DECOUPLING": ("decoupling", "capacitor", "missing cap"),
+    }
+    return any(keyword in verdict_text for keyword in keywords.get(violation_type, (violation_type.lower(),)))

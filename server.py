@@ -5,6 +5,7 @@ Built by Naman Pahariya.
 
 from __future__ import annotations
 import os
+from threading import Lock
 from typing import Any, Dict, Optional
 
 import gradio as gr
@@ -111,18 +112,28 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 # --- Models & Environment State ---
 
-_env = PCBAuditorEnv()
-_last_obs = None
+_env_lock = Lock()
+_envs: Dict[str, PCBAuditorEnv] = {}
+_last_obs_by_session: Dict[str, Any] = {}
 
 
 class ResetRequest(BaseModel):
     task_id: Optional[str] = None
+    session_id: str = "default"
 
 
 class StepRequest(BaseModel):
     check_type: str
     target_nets: Optional[list] = None
     verdict: Optional[str] = None
+    session_id: str = "default"
+
+
+def _get_env(session_id: str) -> PCBAuditorEnv:
+    with _env_lock:
+        if session_id not in _envs:
+            _envs[session_id] = PCBAuditorEnv()
+        return _envs[session_id]
 
 
 # Main API Endpoints
@@ -130,13 +141,15 @@ class StepRequest(BaseModel):
 @app.post("/reset")
 def reset_endpoint(req: ResetRequest = ResetRequest()):
     """OpenEnv-compliant reset: returns observation only, NO reward field"""
-    global _last_obs
     try:
-        obs = _env.reset(task_id=req.task_id)
-        _last_obs = obs
+        env = PCBAuditorEnv()
+        obs = env.reset(task_id=req.task_id)
+        with _env_lock:
+            _envs[req.session_id] = env
+            _last_obs_by_session[req.session_id] = obs
         return {
             "observation": obs.model_dump(),
-            "info": {"message": "Reset successful"}
+            "info": {"message": "Reset successful", "session_id": req.session_id}
         }
     except Exception as e:
         return {
@@ -156,20 +169,24 @@ def reset_endpoint(req: ResetRequest = ResetRequest()):
 @app.post("/step")
 def step_endpoint(req: StepRequest):
     """OpenEnv-compliant step: returns observation, reward, done, info"""
-    global _last_obs
     try:
+        env = _get_env(req.session_id)
         action = Action(
             check_type=req.check_type, 
             target_nets=req.target_nets, 
             verdict=req.verdict
         )
-        obs, reward, done, info = _env.step(action)
-        _last_obs = obs
+        obs, reward, done, info = env.step(action)
+        with _env_lock:
+            _last_obs_by_session[req.session_id] = obs
+        response_info = dict(info)
+        response_info["score"] = float(response_info.get("score", reward.partial_credit))
+        response_info["session_id"] = req.session_id
         return {
             "observation": obs.model_dump(),
             "reward": float(reward.value),
             "done": bool(done),
-            "info": {"score": float(info.get("score", 0.0))}
+            "info": response_info,
         }
     except Exception as e:
         return {
@@ -190,9 +207,9 @@ def step_endpoint(req: StepRequest):
 
 
 @app.get("/state")
-def state_endpoint():
+def state_endpoint(session_id: str = "default"):
     try:
-        return _env.state().model_dump()
+        return _get_env(session_id).state().model_dump()
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -209,10 +226,13 @@ def list_tasks():
     }
 
 
+@app.get("/health")
+def health_endpoint():
     return {
         "status": "online", 
         "environment": "PCB Auditor",
-        "score_range": [0.0, 1.0]
+        "score_range": [0.0, 1.0],
+        "sessions": len(_envs),
     }
 
 
@@ -338,7 +358,7 @@ def run_audit(task_id: str, check_types: list, verdict: str, custom_json: str = 
     return "\n\n".join(log_lines), fig
 
 
-with gr.Blocks(title="PCB Auditor", theme=gr.themes.Soft()) as demo:
+with gr.Blocks(title="PCB Auditor") as demo:
     gr.Markdown("# 🛡️ PCB Safety Auditor")
     gr.Markdown("### Developed by Naman Pahariya")
     
@@ -382,6 +402,10 @@ with gr.Blocks(title="PCB Auditor", theme=gr.themes.Soft()) as demo:
 
 app = gr.mount_gradio_app(app, demo, path="/", root_path="")
 
-if __name__ == "__main__":
+def main():
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=7860)
+
+
+if __name__ == "__main__":
+    main()
